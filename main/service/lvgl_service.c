@@ -1,5 +1,5 @@
 #include "lvgl_service.h"
-#include "lcd_service.h" // 提供 LCD 硬件访问接口
+#include "lcd_service.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -59,7 +59,7 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
         .control_handle = NULL,
 
         /* 用“整屏宽度 × 行数”的条带，X 自然满足 4 对齐；可按内存余量调整行数 */
-        .buffer_size = LCD_H_RES * 40, // 412 * 40 行；PSRAM 充足可调到 *80/*120
+        .buffer_size = LCD_H_RES * 20, // 412 * 40 行；PSRAM 充足可调到 *80/*120
         .double_buffer = true,
         .trans_size = 0, // 0=不额外分配 SRAM 中转
 
@@ -78,7 +78,7 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
             .buff_spiram = 0, // 暂时禁用 PSRAM，使用内部RAM
             .sw_rotate = 0,
 #if LVGL_VERSION_MAJOR >= 9
-            .swap_bytes = 0, // XRGB8888 通常不需要字节交换
+            .swap_bytes = 1, // RGB565 需要字节交换
 #endif
             .full_refresh = 0, // 保持分块刷新（条带）
             .direct_mode = 0,

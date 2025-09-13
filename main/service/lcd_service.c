@@ -102,7 +102,7 @@ esp_err_t lcd_service_init(void)
     const esp_lcd_panel_dev_config_t panel_cfg = {
         .reset_gpio_num = LCD_PIN_RST,              // 没有 RST 就用 -1
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB, // 或 LCD_RGB_ELEMENT_ORDER_BGR
-        .bits_per_pixel = 24,                       // 改为 24-bit RGB888
+        .bits_per_pixel = 16,                       // 使用 16-bit RGB565
         .vendor_config = &vcfg,
     };
 

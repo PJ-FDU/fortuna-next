@@ -3,7 +3,6 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_timer.h"
-#include "esp_psram.h"
 
 #include "i2c_service.h"
 #include "io_expander_service.h"

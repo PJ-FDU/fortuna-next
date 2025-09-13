@@ -34,7 +34,7 @@ set(INCLUDE_DIRS
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES driver esp_timer freertos esp_psram
+    REQUIRES driver esp_timer freertos
     PRIV_REQUIRES
 )
 
