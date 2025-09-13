@@ -34,9 +34,12 @@ set(INCLUDE_DIRS
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES driver esp_timer freertos
+    REQUIRES driver esp_timer freertos nvs_flash spiffs fatfs wear_levelling
     PRIV_REQUIRES
 )
+
+# SPIFFS 数据上传配置
+spiffs_create_partition_image(spiffs ../spiffs_data FLASH_IN_PROJECT)
 
 # 设置编译器警告级别
 target_compile_options(${COMPONENT_LIB} PRIVATE

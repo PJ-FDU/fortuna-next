@@ -1,0 +1,9 @@
+确保LVGL支持PNG和文件系统的配置选项：
+
+在 sdkconfig 中需要启用：
+- CONFIG_LV_USE_PNG=y
+- CONFIG_LV_USE_FS_STDIO=y  
+- CONFIG_LV_FS_STDIO_LETTER='S'
+- CONFIG_LV_FS_STDIO_PATH="/spiffs"
+
+或者在 LVGL 配置中启用这些选项。

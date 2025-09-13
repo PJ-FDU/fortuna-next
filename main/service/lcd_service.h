@@ -19,7 +19,7 @@ extern "C"
 
 /* QSPI：SPI2 + 4Data */
 #define LCD_SPI_HOST (SPI2_HOST)
-#define LCD_SPI_CLK_HZ (80 * 1000 * 1000)
+#define LCD_SPI_CLK_HZ (40 * 1000 * 1000) // 降低到40MHz排除时序问题
 #define LCD_SPI_TRANS_QUEUE_SZ (10)
 #define LCD_SPI_CMD_BITS (32)
 #define LCD_SPI_PARAM_BITS (8)
