@@ -3,6 +3,9 @@ set(SRCS
     "fortuna.c"
     # "qmi8658_complete_example.c"
 
+    # LVGL界面
+    "lvgl_screens/home.c"
+
     # Service层源文件
     "service/i2c_service.c"
     "service/io_expander_service.c"
@@ -18,8 +21,8 @@ set(SRCS
     # "data/user_data.c"
 
     # LVGL界面源文件
-    # "lvgl_screens/screen_home.c"
-    # "lvgl_screens/screen_settings.c"
+    # 旧: "lvgl_screens/screen_home.c"
+    # 旧: "lvgl_screens/screen_settings.c"
 )
 
 # 设置头文件包含目录
