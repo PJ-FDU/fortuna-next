@@ -7,6 +7,15 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 
+// 先尝试包含ESP-SR的VAD头文件 - 根据实际情况调整
+#ifdef CONFIG_ESP32_S3_BOX
+#include "esp_vad.h"
+#define VAD_AVAILABLE 1
+#else
+// 如果VAD不可用，我们先用简单的能量检测
+#define VAD_AVAILABLE 0
+#endif
+
 #include "mic_service.h"
 
 static const char *TAG = "i2s_service";
@@ -16,10 +25,96 @@ static i2s_chan_handle_t s_rx = NULL;
 static TaskHandle_t s_task = NULL;
 static volatile bool s_running = false;
 
+// VAD 相关变量
+#if VAD_AVAILABLE
+static vad_handle_t s_vad_handle = NULL;
+#endif
+static bool s_vad_enabled = true;
+static bool s_vad_active = false;
+static int s_silence_frames = 0;
+static int s_voice_frames = 0;
+
+// VAD 配置参数
+#define VAD_SILENCE_THRESHOLD 15   // 连续静音帧数阈值（约300ms）
+#define VAD_VOICE_THRESHOLD 3      // 连续语音帧数阈值（约60ms）
+#define VAD_ENERGY_THRESHOLD 500.0 // 简单能量阈值（fallback）
+
 static inline int16_t conv_s32_to_s16(int32_t x, int shift_bits)
 {
     return (int16_t)(x >> shift_bits);
 }
+
+#if VAD_AVAILABLE
+static esp_err_t vad_init(void)
+{
+    if (!s_vad_enabled)
+    {
+        return ESP_OK;
+    }
+
+    // 尝试使用ESP-SR VAD - 这里需要根据实际的API调整
+    s_vad_handle = vad_create(VAD_MODE_0); // 或者其他可用的模式
+
+    if (!s_vad_handle)
+    {
+        ESP_LOGE(TAG, "ESP-SR VAD create failed");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "ESP-SR VAD initialized successfully");
+    return ESP_OK;
+}
+
+static void vad_destroy_handle(void)
+{
+    if (s_vad_handle)
+    {
+        vad_destroy(s_vad_handle);
+        s_vad_handle = NULL;
+        ESP_LOGI(TAG, "ESP-SR VAD destroyed");
+    }
+}
+
+static bool vad_process_frame(int16_t *audio_data, size_t samples)
+{
+    if (!s_vad_handle)
+    {
+        return false;
+    }
+
+    // 根据实际的ESP-SR API调用VAD
+    vad_state_t result = vad_process(s_vad_handle, audio_data);
+    return (result == VAD_SPEECH);
+}
+
+#else
+
+// Fallback: 简单的能量检测VAD
+static esp_err_t vad_init(void)
+{
+    ESP_LOGI(TAG, "Using simple energy-based VAD (ESP-SR not available)");
+    return ESP_OK;
+}
+
+static void vad_destroy_handle(void)
+{
+    ESP_LOGI(TAG, "Simple VAD cleanup");
+}
+
+static bool vad_process_frame(int16_t *audio_data, size_t samples)
+{
+    // 计算RMS能量
+    double acc = 0.0;
+    for (size_t i = 0; i < samples; i++)
+    {
+        acc += (double)audio_data[i] * (double)audio_data[i];
+    }
+    double rms = sqrt(acc / samples);
+
+    return (rms > VAD_ENERGY_THRESHOLD);
+}
+
+#endif
 
 static esp_err_t i2s_init_std_rx(const i2s_service_cfg_t *c)
 {
@@ -42,6 +137,7 @@ static esp_err_t i2s_init_std_rx(const i2s_service_cfg_t *c)
 
     ESP_RETURN_ON_ERROR(i2s_channel_init_std_mode(s_rx, &std_cfg), TAG, "init_std");
     ESP_RETURN_ON_ERROR(i2s_channel_enable(s_rx), TAG, "enable");
+
     ESP_LOGI(TAG, "I2S ready: %lu Hz, %d-bit container, %s, %s slot (BCLK=%d WS=%d DIN=%d)",
              (unsigned long)c->sample_rate, (int)c->data_bits * 8,
              (c->slot_mode == I2S_SLOT_MODE_MONO ? "MONO" : "STEREO"),
@@ -71,7 +167,9 @@ static void task_i2s_capture(void *arg)
         return;
     }
 
-    ESP_LOGI(TAG, "Capture frame: %lu ms, %lu samples", (unsigned long)s_cfg.frame_ms, (unsigned long)samples_per_frame);
+    ESP_LOGI(TAG, "Capture frame: %lu ms, %lu samples, VAD: %s",
+             (unsigned long)s_cfg.frame_ms, (unsigned long)samples_per_frame,
+             s_vad_enabled ? "ENABLED" : "DISABLED");
 
     while (s_running)
     {
@@ -83,48 +181,82 @@ static void task_i2s_capture(void *arg)
             continue;
         }
 
-        // 转换为 int16 并计算 RMS（电平值）
+        // 转换为 int16 并计算统计信息
         double acc = 0.0;
-        int16_t min_val = INT16_MAX, max_val = INT16_MIN; // 正确的初始值
+        int16_t min_val = INT16_MAX, max_val = INT16_MIN;
 
         for (uint32_t i = 0; i < samples_per_frame; ++i)
         {
-            int16_t s = conv_s32_to_s16(buf32[i], s_cfg.shift_bits); // 32-bit 转 16-bit
+            int16_t s = conv_s32_to_s16(buf32[i], s_cfg.shift_bits);
             buf16[i] = s;
 
-            // 更新最大值和最小值
             if (s < min_val)
                 min_val = s;
             if (s > max_val)
                 max_val = s;
-
-            // 计算 RMS
             acc += (double)s * (double)s;
         }
 
         double rms = sqrt(acc / samples_per_frame);
         double dbfs = (rms > 0.5) ? 20.0 * log10(rms / 32768.0) : -120.0;
 
-        // 打印每一帧的前16个样本和电平值
-        ESP_LOGI(TAG, "Min sample: %d, Max sample: %d", min_val, max_val);
-        ESP_LOGI(TAG, "RMS=%.1f dBFS=%.1f", rms, dbfs);
-
-        // 打印 PCM16 数据
-        if (s_cfg.print_head > 0)
+        // VAD 检测
+        bool voice_detected = false;
+        if (s_vad_enabled)
         {
-            printf("[PCM16] ");
-            uint32_t head = (s_cfg.print_head < (int)samples_per_frame) ? s_cfg.print_head : samples_per_frame;
-            for (uint32_t i = 0; i < head; ++i)
-                printf("%d ", (int)buf16[i]);
-            printf("| RMS=%.1f dBFS=%.1f\n", rms, dbfs);
+            voice_detected = vad_process_frame(buf16, samples_per_frame);
+
+            if (voice_detected)
+            {
+                s_voice_frames++;
+                s_silence_frames = 0;
+
+                if (!s_vad_active && s_voice_frames >= VAD_VOICE_THRESHOLD)
+                {
+                    s_vad_active = true;
+                    ESP_LOGI(TAG, "Voice activity detected");
+                }
+            }
+            else
+            {
+                s_silence_frames++;
+                s_voice_frames = 0;
+
+                if (s_vad_active && s_silence_frames >= VAD_SILENCE_THRESHOLD)
+                {
+                    s_vad_active = false;
+                    ESP_LOGI(TAG, "Voice activity ended");
+                }
+            }
         }
         else
         {
-            printf("RMS=%.1f dBFS=%.1f\n", rms, dbfs);
+            s_vad_active = true; // 如果VAD未启用，总是发送
         }
 
-        // 发送音频数据
-        mic_service_send_pcm16(buf16, samples_per_frame); // 发送 PCM16 数据
+        // 打印状态信息
+        // if (s_cfg.print_head > 0)
+        // {
+        //     printfPCM("[PCM16] ");
+        //     uint32_t head = (s_cfg.print_head < (int)samples_per_frame) ? s_cfg.print_head : samples_per_frame;
+        //     for (uint32_t i = 0; i < head; ++i)
+        //         printf("%d ", (int)buf16[i]);
+        //     printf("| RMS=%.1f dBFS=%.1f VAD=%s\n", rms, dbfs, s_vad_active ? "ACTIVE" : "SILENT");
+        // }
+        // else
+        // {
+        //     printf("RMS=%.1f dBFS=%.1f VAD=%s\n", rms, dbfs, s_vad_active ? "ACTIVE" : "SILENT");
+        // }
+
+        // 只在VAD激活时发送音频数据
+        if (s_vad_active)
+        {
+            esp_err_t ret = mic_service_send_pcm16(buf16, samples_per_frame);
+            if (ret != ESP_OK && ret != ESP_ERR_TIMEOUT && ret != ESP_ERR_INVALID_STATE)
+            {
+                ESP_LOGW(TAG, "Failed to send audio frame: %s", esp_err_to_name(ret));
+            }
+        }
     }
 
     free(buf32);
@@ -135,8 +267,11 @@ static void task_i2s_capture(void *arg)
 esp_err_t i2s_service_start(const i2s_service_cfg_t *cfg)
 {
     if (s_running)
+    {
         return ESP_OK;
-    // 默认参数（给没填的字段一个合理默认）
+    }
+
+    // 默认参数
     i2s_service_cfg_t def = {
         .port = I2S_NUM_1,
         .gpio_bclk = 15,
@@ -150,33 +285,76 @@ esp_err_t i2s_service_start(const i2s_service_cfg_t *cfg)
         .slot_mask = I2S_STD_SLOT_RIGHT,
         .frame_ms = 20,
         .shift_bits = 14,
-        .print_head = 16,
+        .print_head = 0,
     };
+
     s_cfg = def;
     if (cfg)
     {
-        // 覆盖用户传入的配置（简单逐项赋值）
         s_cfg = *cfg;
     }
 
+    // 验证采样率
+    if (s_vad_enabled && s_cfg.sample_rate != 16000)
+    {
+        ESP_LOGW(TAG, "VAD works best with 16kHz sample rate, current: %lu Hz",
+                 (unsigned long)s_cfg.sample_rate);
+    }
+
     ESP_RETURN_ON_ERROR(i2s_init_std_rx(&s_cfg), TAG, "i2s init");
+
+    // 初始化VAD
+    if (s_vad_enabled)
+    {
+        ESP_RETURN_ON_ERROR(vad_init(), TAG, "vad init");
+    }
+
     s_running = true;
-    xTaskCreatePinnedToCore(task_i2s_capture, "i2s_cap", 3 * 1024, NULL, 5, &s_task, 0);
+    xTaskCreatePinnedToCore(task_i2s_capture, "i2s_cap", 4 * 1024, NULL, 5, &s_task, 0);
+
     return ESP_OK;
 }
 
 void i2s_service_stop(void)
 {
     s_running = false;
+
     if (s_task)
     {
         vTaskDelete(s_task);
         s_task = NULL;
     }
+
     if (s_rx)
     {
         i2s_channel_disable(s_rx);
         i2s_del_channel(s_rx);
         s_rx = NULL;
     }
+
+    // 销毁VAD
+    vad_destroy_handle();
+
+    // 重置VAD状态
+    s_vad_active = false;
+    s_silence_frames = 0;
+    s_voice_frames = 0;
+}
+
+void i2s_service_enable_vad(bool enable)
+{
+    if (enable != s_vad_enabled)
+    {
+        s_vad_enabled = enable;
+        ESP_LOGI(TAG, "VAD %s", enable ? "enabled" : "disabled");
+        if (!enable)
+        {
+            s_vad_active = true; // 禁用VAD时，默认一直发送
+        }
+    }
+}
+
+bool i2s_service_is_vad_active(void)
+{
+    return s_vad_active;
 }
