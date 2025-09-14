@@ -1,6 +1,7 @@
 # 设置源文件
 set(SRCS
     "fortuna.c"
+
     # "qmi8658_complete_example.c"
 
     # LVGL界面
@@ -39,7 +40,7 @@ set(INCLUDE_DIRS
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES driver esp_timer freertos nvs_flash spiffs fatfs wear_levelling
+    REQUIRES driver esp_timer esp_wifi freertos nvs_flash spiffs fatfs wear_levelling
     PRIV_REQUIRES
 )
 

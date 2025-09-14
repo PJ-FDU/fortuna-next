@@ -7,6 +7,8 @@
 #include "esp_check.h"
 #include "esp_heap_caps.h"
 
+#include "mic_service.h"
+
 static const char *TAG = "i2s_service";
 
 static i2s_service_cfg_t s_cfg;
@@ -50,42 +52,64 @@ static esp_err_t i2s_init_std_rx(const i2s_service_cfg_t *c)
 
 static void task_i2s_capture(void *arg)
 {
-    const uint32_t samples_per_frame = s_cfg.sample_rate * s_cfg.frame_ms / 1000;
-    const size_t bytes_per_frame32 = samples_per_frame * sizeof(int32_t);
+    // 动态计算帧大小
+    const uint32_t samples_per_frame = (s_cfg.sample_rate * s_cfg.frame_ms) / 1000;
+    const uint32_t bytes_per_frame_32 = samples_per_frame * sizeof(int32_t);
 
-    int32_t *buf32 = heap_caps_malloc(bytes_per_frame32, MALLOC_CAP_DEFAULT);
+    int32_t *buf32 = heap_caps_malloc(bytes_per_frame_32, MALLOC_CAP_DEFAULT);
     int16_t *buf16 = heap_caps_malloc(samples_per_frame * sizeof(int16_t), MALLOC_CAP_DEFAULT);
+
     if (!buf32 || !buf16)
     {
         ESP_LOGE(TAG, "malloc failed");
         s_running = false;
+        if (buf32)
+            free(buf32);
+        if (buf16)
+            free(buf16);
         vTaskDelete(NULL);
         return;
     }
 
-    ESP_LOGI(TAG, "Capture frame: %lu ms, %lu samples",
-             (unsigned long)s_cfg.frame_ms, (unsigned long)samples_per_frame);
+    ESP_LOGI(TAG, "Capture frame: %lu ms, %lu samples", (unsigned long)s_cfg.frame_ms, (unsigned long)samples_per_frame);
 
     while (s_running)
     {
         size_t nread = 0;
-        esp_err_t err = i2s_channel_read(s_rx, buf32, bytes_per_frame32, &nread, portMAX_DELAY);
-        if (err != ESP_OK || nread != bytes_per_frame32)
+        esp_err_t err = i2s_channel_read(s_rx, buf32, bytes_per_frame_32, &nread, portMAX_DELAY);
+        if (err != ESP_OK || nread != bytes_per_frame_32)
         {
             ESP_LOGW(TAG, "read err=%d nread=%u", err, (unsigned)nread);
             continue;
         }
 
+        // 转换为 int16 并计算 RMS（电平值）
         double acc = 0.0;
+        int16_t min_val = INT16_MAX, max_val = INT16_MIN; // 正确的初始值
+
         for (uint32_t i = 0; i < samples_per_frame; ++i)
         {
-            int16_t s = conv_s32_to_s16(buf32[i], s_cfg.shift_bits);
+            int16_t s = conv_s32_to_s16(buf32[i], s_cfg.shift_bits); // 32-bit 转 16-bit
             buf16[i] = s;
+
+            // 更新最大值和最小值
+            if (s < min_val)
+                min_val = s;
+            if (s > max_val)
+                max_val = s;
+
+            // 计算 RMS
             acc += (double)s * (double)s;
         }
+
         double rms = sqrt(acc / samples_per_frame);
         double dbfs = (rms > 0.5) ? 20.0 * log10(rms / 32768.0) : -120.0;
 
+        // 打印每一帧的前16个样本和电平值
+        ESP_LOGI(TAG, "Min sample: %d, Max sample: %d", min_val, max_val);
+        ESP_LOGI(TAG, "RMS=%.1f dBFS=%.1f", rms, dbfs);
+
+        // 打印 PCM16 数据
         if (s_cfg.print_head > 0)
         {
             printf("[PCM16] ");
@@ -98,6 +122,9 @@ static void task_i2s_capture(void *arg)
         {
             printf("RMS=%.1f dBFS=%.1f\n", rms, dbfs);
         }
+
+        // 发送音频数据
+        mic_service_send_pcm16(buf16, samples_per_frame); // 发送 PCM16 数据
     }
 
     free(buf32);
