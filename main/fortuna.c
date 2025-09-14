@@ -19,6 +19,7 @@
 #include "esp_lvgl_port.h"
 #include <math.h>
 #include "lvgl_screens/home.h"  /* 抽离出的星盘创建函数 */
+#include "i2s_service.h"
 
 static const char *TAG = "FORTUNA";
 
@@ -75,6 +76,20 @@ void app_main(void)
     astro_create(lv_screen_active());
 
     lvgl_port_unlock();
+
+    i2s_service_cfg_t cfg = {
+        .port = I2S_NUM_1,
+        .gpio_bclk = 15, .gpio_ws = 2, .gpio_din = 39,
+        .gpio_mclk = I2S_GPIO_UNUSED, .gpio_dout = I2S_GPIO_UNUSED,
+        .sample_rate = 16000,
+        .data_bits = I2S_DATA_BIT_WIDTH_32BIT,
+        .slot_mode = I2S_SLOT_MODE_MONO,
+        .slot_mask = I2S_STD_SLOT_RIGHT,   // 不对就改成 LEFT 试一下
+        .frame_ms = 20,
+        .shift_bits = 14,                  // 位对齐不对时尝试改 16/8
+        .print_head = 16,
+    };
+    ESP_ERROR_CHECK(i2s_service_start(&cfg));
 
     ESP_LOGI(TAG, "System initialization completed");
 }

@@ -8,12 +8,14 @@ set(SRCS
 
     # Service层源文件
     "service/i2c_service.c"
+    "service/i2s_service.c"
     "service/io_expander_service.c"
     "service/pcf85063a_service.c"
     "service/qmi8658_service.c"
     "service/lcd_service.c"
     "service/lcd_touch_service.c"
     "service/lvgl_service.c"
+    "service/mic_service.c"
 
     # Data层源文件
     # "data/data_manager.c"
