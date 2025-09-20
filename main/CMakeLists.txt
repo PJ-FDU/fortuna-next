@@ -7,6 +7,9 @@ set(SRCS
     # LVGL界面
     "lvgl_screens/home.c"
 
+    # UI组件
+    "ui/voice_overlay.c"
+
     # Service层源文件
     "service/i2c_service.c"
     "service/i2s_service.c"
@@ -34,6 +37,7 @@ set(INCLUDE_DIRS
     "service"
     "data"
     "lvgl_screens"
+    "ui"
 )
 
 # 注册组件

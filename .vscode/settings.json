@@ -2,9 +2,7 @@
   "C_Cpp.intelliSenseEngine": "default",
   "idf.espIdfPathWin": "C:\\Users\\PanJian\\esp\\v5.5\\esp-idf",
   "idf.pythonInstallPath": "C:\\Users\\PanJian\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
-  "idf.openOcdConfigs": [
-    "board/esp32s3-builtin.cfg"
-  ],
+  "idf.openOcdConfigs": ["board/esp32s3-builtin.cfg"],
   "idf.toolsPathWin": "C:\\Users\\PanJian\\.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
@@ -18,18 +16,7 @@
   "idf.flashType": "UART",
   "idf.portWin": "COM5",
   "files.associations": {
-    "*.cjson": "jsonc",
-    "*.wxss": "css",
-    "*.wxs": "javascript",
-    "io_expander_service.h": "c",
-    "unity.h": "c",
-    "lvgl.h": "c",
-    "stdlib.h": "c",
-    "task.h": "c",
-    "i2c.h": "c",
-    "esp_io_expander_tca9554.h": "c",
-    "qmi8658.h": "c",
-    "i2c_service.h": "c",
-    "chrono": "c"
+    "*/**.c": "c",
+    "*/**.h": "c"
   }
 }

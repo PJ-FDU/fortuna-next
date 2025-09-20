@@ -19,6 +19,7 @@
 #include "esp_lvgl_port.h"
 #include <math.h>
 #include "lvgl_screens/home.h" /* 抽离出的星盘创建函数 */
+#include "ui/voice_overlay.h"  /* 语音识别遮罩 */
 #include "i2s_service.h"
 #include "mic_service.h"
 #include "esp_wifi.h"
@@ -32,6 +33,18 @@ static const char *TAG = "FORTUNA";
 #define WIFI_PASS "4001001111"   // Wi-Fi 密码
 
 static bool s_wifi_connected = false;
+
+// VAD状态变化回调函数
+static void on_vad_state_changed(bool vad_active)
+{
+    ESP_LOGI(TAG, "VAD state changed: %s", vad_active ? "ACTIVE" : "INACTIVE");
+    
+    if (vad_active) {
+        voice_overlay_show();
+    } else {
+        voice_overlay_hide();
+    }
+}
 
 // 统一的 Wi-Fi 事件处理函数
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -216,6 +229,9 @@ void app_main(void)
     /* 星盘主体（412×412，自绘） */
     astro_create(lv_screen_active());
 
+    /* 初始化语音识别遮罩 */
+    voice_overlay_init();
+
     lvgl_port_unlock();
 
     /* 5) Wi-Fi 连接 */
@@ -235,8 +251,12 @@ void app_main(void)
         .slot_mask = I2S_STD_SLOT_RIGHT,
         .frame_ms = 20,
         .shift_bits = 14,
-        .print_head = 16, // 在网络传输时，通常关闭终端打印
+        .print_head = 0, // 在网络传输时，通常关闭终端打印
     };
+    
+    /* 设置VAD状态变化回调 */
+    i2s_service_set_vad_callback(on_vad_state_changed);
+    
     ESP_ERROR_CHECK(i2s_service_start(&cfg));
 
     // 注意：mic_service_start() 已经从这里移除，

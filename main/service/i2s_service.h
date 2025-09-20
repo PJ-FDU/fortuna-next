@@ -32,6 +32,26 @@ extern "C"
     /** 停止采集并释放资源 */
     void i2s_service_stop(void);
 
+    /**
+     * @brief VAD状态变化回调函数类型
+     */
+    typedef void (*vad_state_callback_t)(bool vad_active);
+
+    /**
+     * @brief 设置VAD状态变化回调函数
+     */
+    void i2s_service_set_vad_callback(vad_state_callback_t callback);
+
+    /**
+     * @brief 启用或禁用VAD功能
+     */
+    void i2s_service_enable_vad(bool enable);
+
+    /**
+     * @brief 获取当前VAD状态
+     */
+    bool i2s_service_is_vad_active(void);
+
 #ifdef __cplusplus
 }
 #endif

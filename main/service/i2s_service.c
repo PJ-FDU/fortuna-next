@@ -34,6 +34,10 @@ static bool s_vad_active = false;
 static int s_silence_frames = 0;
 static int s_voice_frames = 0;
 
+// VAD状态变化回调
+typedef void (*vad_state_callback_t)(bool vad_active);
+static vad_state_callback_t s_vad_callback = NULL;
+
 // VAD 配置参数
 #define VAD_SILENCE_THRESHOLD 15   // 连续静音帧数阈值（约300ms）
 #define VAD_VOICE_THRESHOLD 3      // 连续语音帧数阈值（约60ms）
@@ -42,6 +46,25 @@ static int s_voice_frames = 0;
 static inline int16_t conv_s32_to_s16(int32_t x, int shift_bits)
 {
     return (int16_t)(x >> shift_bits);
+}
+
+// VAD状态更新函数
+static void update_vad_state(bool new_state)
+{
+    if (s_vad_active != new_state) {
+        s_vad_active = new_state;
+        
+        if (new_state) {
+            ESP_LOGI(TAG, "Voice activity detected");
+        } else {
+            ESP_LOGI(TAG, "Voice activity ended");
+        }
+        
+        // 调用回调函数通知UI更新
+        if (s_vad_callback) {
+            s_vad_callback(new_state);
+        }
+    }
 }
 
 #if VAD_AVAILABLE
@@ -213,8 +236,7 @@ static void task_i2s_capture(void *arg)
 
                 if (!s_vad_active && s_voice_frames >= VAD_VOICE_THRESHOLD)
                 {
-                    s_vad_active = true;
-                    ESP_LOGI(TAG, "Voice activity detected");
+                    update_vad_state(true);
                 }
             }
             else
@@ -224,14 +246,15 @@ static void task_i2s_capture(void *arg)
 
                 if (s_vad_active && s_silence_frames >= VAD_SILENCE_THRESHOLD)
                 {
-                    s_vad_active = false;
-                    ESP_LOGI(TAG, "Voice activity ended");
+                    update_vad_state(false);
                 }
             }
         }
         else
         {
-            s_vad_active = true; // 如果VAD未启用，总是发送
+            if (!s_vad_active) {
+                update_vad_state(true); // 如果VAD未启用，设置为激活状态
+            }
         }
 
         // 打印状态信息
@@ -357,4 +380,10 @@ void i2s_service_enable_vad(bool enable)
 bool i2s_service_is_vad_active(void)
 {
     return s_vad_active;
+}
+
+void i2s_service_set_vad_callback(vad_state_callback_t callback)
+{
+    s_vad_callback = callback;
+    ESP_LOGI(TAG, "VAD callback %s", callback ? "registered" : "cleared");
 }
