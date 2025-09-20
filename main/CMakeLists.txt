@@ -20,6 +20,9 @@ set(SRCS
     "service/lcd_touch_service.c"
     "service/lvgl_service.c"
     "service/mic_service.c"
+    "service/wifi_service.c"
+    "service/ui_system_service.c"
+    "service/audio_system_service.c"
 
     # Data层源文件
     # "data/data_manager.c"
