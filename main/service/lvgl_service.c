@@ -50,8 +50,8 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
         .control_handle = NULL,
 
         /* 以“整屏宽度 * 若干行”作为缓冲；按需调大/双缓冲（看可用内存） */
-        .buffer_size = LCD_H_RES * 20, // 20 行条带
-        .double_buffer = false,
+        .buffer_size = LCD_H_RES * LCD_V_RES * 3, // 20 行条带
+        .double_buffer = true,
         .trans_size = 0,
 
         .hres = LCD_H_RES,
@@ -62,14 +62,14 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
         .rotation = {.swap_xy = false, .mirror_x = false, .mirror_y = false},
 
 #if LVGL_VERSION_MAJOR >= 9
-        .color_format = LV_COLOR_FORMAT_RGB565, // RGB565 最稳定的格式
+        .color_format = LV_COLOR_FORMAT_RGB888, // RGB565 最稳定的格式
 #endif
         .flags = {
-            .buff_dma = 1,    // RGB565支持DMA，最佳性能
-            .buff_spiram = 0, // 未启用PSRAM
+            .buff_dma = 0,    // RGB565支持DMA，最佳性能
+            .buff_spiram = 1, // 未启用PSRAM
             .sw_rotate = 0,
 #if LVGL_VERSION_MAJOR >= 9
-            .swap_bytes = 1, // 尝试字节交换，可能解决花屏问题
+            .swap_bytes = 0, // 尝试字节交换，可能解决花屏问题
 #endif
             .full_refresh = 0,
             .direct_mode = 0,

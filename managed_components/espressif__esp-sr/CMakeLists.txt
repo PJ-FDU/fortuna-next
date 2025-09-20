@@ -1,31 +1,31 @@
-if((${IDF_TARGET} STREQUAL "esp32s3") OR(${IDF_TARGET} STREQUAL "esp32p4") OR(${IDF_TARGET} STREQUAL "esp32") OR(${IDF_TARGET} STREQUAL "esp32c3") OR(${IDF_TARGET} STREQUAL "esp32c5") OR(${IDF_TARGET} STREQUAL "esp32c6") OR(${IDF_TARGET} STREQUAL "esp32s2"))
+if((${IDF_TARGET} STREQUAL "esp32s3") OR (${IDF_TARGET} STREQUAL "esp32p4") OR (${IDF_TARGET} STREQUAL "esp32") OR (${IDF_TARGET} STREQUAL "esp32c3") OR (${IDF_TARGET} STREQUAL "esp32c5") OR (${IDF_TARGET} STREQUAL "esp32c6") OR  (${IDF_TARGET} STREQUAL "esp32s2"))
     set(include_dirs
         "esp-tts/esp_tts_chinese/include"
         "include/${IDF_TARGET}"
         "src/include"
-    )
-
+        )
+        
     set(srcs
         "src/model_path.c"
         "src/esp_sr_debug.c"
         "src/esp_mn_speech_commands.c"
         "src/esp_process_sdkconfig.c"
-    )
+        )
 
     set(requires
-        esp-sr
         json
         spiffs
-    )
+        )
 
-    IF(IDF_VERSION_MAJOR GREATER 4)
+    IF (IDF_VERSION_MAJOR GREATER 4)
         list(APPEND requires esp_partition)
-    ENDIF(IDF_VERSION_MAJOR GREATER 4)
+    ENDIF (IDF_VERSION_MAJOR GREATER 4)
 
     idf_component_register(SRCS ${srcs}
-        INCLUDE_DIRS ${include_dirs}
-        REQUIRES ${requires}
-        PRIV_REQUIRES spi_flash)
+                        INCLUDE_DIRS ${include_dirs}
+                        REQUIRES ${requires}
+                        PRIV_REQUIRES spi_flash)
+
 
     target_link_libraries(${COMPONENT_TARGET} "-L ${CMAKE_CURRENT_SOURCE_DIR}/lib/${IDF_TARGET}")
     target_link_libraries(${COMPONENT_TARGET} "-L ${CMAKE_CURRENT_SOURCE_DIR}/esp-tts/esp_tts_chinese/${IDF_TARGET}")
@@ -45,7 +45,7 @@ if((${IDF_TARGET} STREQUAL "esp32s3") OR(${IDF_TARGET} STREQUAL "esp32p4") OR(${
     idf_component_get_property(esp_dsp_lib espressif__esp-dsp COMPONENT_LIB)
     idf_component_get_property(dl_fft_lib espressif__dl_fft COMPONENT_LIB)
 
-    set(sr_libs
+    set(sr_libs 
         $<TARGET_FILE:${esp_dsp_lib}>
         $<TARGET_FILE:${dl_fft_lib}>
         dl_lib
@@ -70,6 +70,8 @@ if((${IDF_TARGET} STREQUAL "esp32s3") OR(${IDF_TARGET} STREQUAL "esp32p4") OR(${
     target_link_libraries(${COMPONENT_TARGET} "-Wl,--start-group"
         ${sr_libs}
         "-Wl,--end-group")
+
+
 endif()
 
 # Add model partition and flash srmodels.bin
@@ -94,6 +96,6 @@ if(CONFIG_PARTITION_TABLE_CUSTOM)
         esptool_py_flash_to_partition(flash "model" "${image_file}")
     else()
         set(message "Failed to find model in partition table file"
-            "Please add a line(Name=model) to the partition file if you want to use esp-sr models.")
+                    "Please add a line(Name=model) to the partition file if you want to use esp-sr models.")
     endif()
 endif()

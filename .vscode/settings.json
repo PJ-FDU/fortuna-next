@@ -23,6 +23,7 @@
     "*/**.h": "c",
     "nvs_flash.h": "c",
     "esp_partition.h": "c",
-    "esp_heap_caps.h": "c"
+    "esp_heap_caps.h": "c",
+    "lvgl.h": "c"
   }
 }

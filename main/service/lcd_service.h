@@ -15,11 +15,11 @@ extern "C"
 /* ====== 面板参数 ====== */
 #define LCD_H_RES (412)
 #define LCD_V_RES (412)
-#define LCD_COLOR_BITS (16) // RGB565
+#define LCD_COLOR_BITS (24) // RGB565
 
 /* QSPI：SPI2 + 4Data */
 #define LCD_SPI_HOST (SPI2_HOST)
-#define LCD_SPI_CLK_HZ (40 * 1000 * 1000) // 降低到40MHz排除时序问题
+#define LCD_SPI_CLK_HZ (80 * 1000 * 1000) // 降低到40MHz排除时序问题
 #define LCD_SPI_TRANS_QUEUE_SZ (10)
 #define LCD_SPI_CMD_BITS (32)
 #define LCD_SPI_PARAM_BITS (8)

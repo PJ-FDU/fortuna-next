@@ -73,7 +73,7 @@ esp_err_t lcd_service_init(void)
         .data1_io_num = LCD_PIN_D1,
         .data2_io_num = LCD_PIN_D2,
         .data3_io_num = LCD_PIN_D3,
-        .max_transfer_sz = 2048,
+        .max_transfer_sz = 4096,
         .flags = SPICOMMON_BUSFLAG_MASTER,
     };
     ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO), TAG, "spi_bus_init");
@@ -102,7 +102,7 @@ esp_err_t lcd_service_init(void)
     const esp_lcd_panel_dev_config_t panel_cfg = {
         .reset_gpio_num = LCD_PIN_RST,              // 没有 RST 就用 -1
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB, // 或 LCD_RGB_ELEMENT_ORDER_BGR
-        .bits_per_pixel = 16,                       // 16-bit RGB565 匹配LVGL
+        .bits_per_pixel = 24,                       // 16-bit RGB565 匹配LVGL
         .vendor_config = &vcfg,
     };
 
