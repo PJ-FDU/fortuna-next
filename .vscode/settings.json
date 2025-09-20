@@ -16,7 +16,13 @@
   "idf.flashType": "UART",
   "idf.portWin": "COM5",
   "files.associations": {
+    "*.cjson": "jsonc",
+    "*.wxss": "css",
+    "*.wxs": "javascript",
     "*/**.c": "c",
-    "*/**.h": "c"
+    "*/**.h": "c",
+    "nvs_flash.h": "c",
+    "esp_partition.h": "c",
+    "esp_heap_caps.h": "c"
   }
 }

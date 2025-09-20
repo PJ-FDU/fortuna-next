@@ -14,6 +14,14 @@
 #include "audio_system_service.h"
 #include "ui/voice_overlay.h"
 
+#include "nvs_flash.h"
+#include "nvs.h"
+#include "esp_partition.h" // 添加分区API
+#include "esp_heap_caps.h" // 添加内存查看
+#include "esp_psram.h"
+#include "esp_spiffs.h"
+#include "dirent.h"
+
 static const char *TAG = "FORTUNA";
 
 #define WIFI_SSID "ziroom_3501A" // Wi-Fi 名称
@@ -54,28 +62,28 @@ void app_main(void)
     ESP_LOGI(TAG, "=== Fortuna System Starting ===");
 
     // 1. 初始化硬件服务
-    ESP_LOGI(TAG, "Initializing hardware services...");
-    ESP_ERROR_CHECK(esp_i2c_service_init());
-    ESP_ERROR_CHECK(esp_io_expander_service_init());
-    ESP_ERROR_CHECK(lcd_service_init());
+    // ESP_LOGI(TAG, "Initializing hardware services...");
+    // ESP_ERROR_CHECK(esp_i2c_service_init());
+    // ESP_ERROR_CHECK(esp_io_expander_service_init());
+    // ESP_ERROR_CHECK(lcd_service_init());
 
     // 2. 初始化UI系统
-    ESP_LOGI(TAG, "Initializing UI system...");
-    ESP_ERROR_CHECK(ui_system_init(
-        lcd_service_get_panel(),
-        lcd_service_get_panel_io(),
-        NULL));
+    // ESP_LOGI(TAG, "Initializing UI system...");
+    // ESP_ERROR_CHECK(ui_system_init(
+    //     lcd_service_get_panel(),
+    //     lcd_service_get_panel_io(),
+    //     NULL));
 
     // 3. 初始化音频系统
-    ESP_LOGI(TAG, "Initializing audio system...");
-    ESP_ERROR_CHECK(audio_system_init(on_vad_state_changed, NULL));
+    // ESP_LOGI(TAG, "Initializing audio system...");
+    // ESP_ERROR_CHECK(audio_system_init(on_vad_state_changed, NULL));
 
     // 4. 初始化WiFi服务
-    ESP_LOGI(TAG, "Initializing WiFi service...");
-    ESP_ERROR_CHECK(wifi_service_init(WIFI_SSID, WIFI_PASS, on_wifi_status_changed));
+    // ESP_LOGI(TAG, "Initializing WiFi service...");
+    // ESP_ERROR_CHECK(wifi_service_init(WIFI_SSID, WIFI_PASS, on_wifi_status_changed));
 
-    ESP_LOGI(TAG, "=== System initialization completed ===");
-    ESP_LOGI(TAG, "System is running, waiting for events...");
+    // ESP_LOGI(TAG, "=== System initialization completed ===");
+    // ESP_LOGI(TAG, "System is running, waiting for events...");
 
     // 主循环 - 系统空闲
     while (1)
