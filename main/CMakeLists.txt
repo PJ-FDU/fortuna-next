@@ -3,6 +3,8 @@ set(SRCS
     "fortuna.c"
 
     # "qmi8658_complete_example.c"
+    "font/lv_font_pencil_24.c"
+    "font/lv_font_pencil_96.c"
 
     # LVGL界面
     "lvgl_screens/home.c"
@@ -19,10 +21,10 @@ set(SRCS
     "service/lcd_service.c"
     "service/lcd_touch_service.c"
     "service/lvgl_service.c"
-    "service/mic_service.c"
-    "service/wifi_service.c"
+    # "service/mic_service.c"
+    # "service/wifi_service.c"
     "service/ui_system_service.c"
-    "service/audio_system_service.c"
+    # "service/audio_system_service.c"
 
     # Data层源文件
     # "data/data_manager.c"
@@ -37,10 +39,11 @@ set(SRCS
 # 设置头文件包含目录
 set(INCLUDE_DIRS
     "."
+    "font"
     "service"
     "data"
-    "lvgl_screens"
-    "ui"
+    # "lvgl_screens"
+    # "ui"
 )
 
 # 注册组件
@@ -53,6 +56,13 @@ idf_component_register(
 
 # SPIFFS 数据上传配置
 spiffs_create_partition_image(spiffs ../spiffs_data FLASH_IN_PROJECT)
+
+# 获取 managed component: lvgl__lvgl 的 target
+idf_component_get_property(LVGL_LIB lvgl__lvgl COMPONENT_LIB)
+
+# 告诉 LVGL 去哪里找 lv_conf.h
+target_compile_definitions(${LVGL_LIB} PUBLIC LV_CONF_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h\")
+target_include_directories(${LVGL_LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # 设置编译器警告级别
 target_compile_options(${COMPONENT_LIB} PRIVATE

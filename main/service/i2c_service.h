@@ -15,7 +15,14 @@ extern "C"
 
 #define I2C_SPEED_HZ 400000
 
+    /**
+     * @brief 初始化 I2C 主总线
+     *
+     * @return ESP_OK 成功
+     */
     esp_err_t esp_i2c_service_init(void);
+
+    // Use driver-provided i2c_master_get_bus_handle() directly; no wrapper here.
 
 #ifdef __cplusplus
 }

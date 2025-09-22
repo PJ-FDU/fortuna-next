@@ -9,10 +9,10 @@
 #include "lcd_service.h"
 
 // 高级服务
-#include "wifi_service.h"
+// #include "wifi_service.h"
 #include "ui_system_service.h"
-#include "audio_system_service.h"
-#include "ui/voice_overlay.h"
+// #include "audio_system_service.h"
+// #include "ui/voice_overlay.h"
 
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -30,31 +30,31 @@ static const char *TAG = "FORTUNA";
 #define WIFI_PASS "4001001111"   // Wi-Fi 密码
 
 // VAD状态变化回调函数
-static void on_vad_state_changed(bool vad_active)
-{
-    ESP_LOGI(TAG, "VAD state changed: %s", vad_active ? "ACTIVE" : "INACTIVE");
+// static void on_vad_state_changed(bool vad_active)
+// {
+//     ESP_LOGI(TAG, "VAD state changed: %s", vad_active ? "ACTIVE" : "INACTIVE");
 
-    if (vad_active)
-    {
-        voice_overlay_show();
-    }
-    else
-    {
-        voice_overlay_hide();
-    }
-}
+//     if (vad_active)
+//     {
+//         voice_overlay_show();
+//     }
+//     else
+//     {
+//         voice_overlay_hide();
+//     }
+// }
 
 // WiFi连接状态回调函数
-static void on_wifi_status_changed(bool connected)
-{
-    ESP_LOGI(TAG, "WiFi status changed: %s", connected ? "CONNECTED" : "DISCONNECTED");
+// static void on_wifi_status_changed(bool connected)
+// {
+//     ESP_LOGI(TAG, "WiFi status changed: %s", connected ? "CONNECTED" : "DISCONNECTED");
 
-    if (connected)
-    {
-        // 网络就绪，启动音频网络服务
-        audio_system_start_network_services();
-    }
-}
+//     if (connected)
+//     {
+//         // 网络就绪，启动音频网络服务
+//         audio_system_start_network_services();
+//     }
+// }
 
 /*===========================*
  *           app_main
@@ -71,10 +71,13 @@ void app_main(void)
 
     // 2. 初始化UI系统
     ESP_LOGI(TAG, "Initializing UI system...");
-    ESP_ERROR_CHECK(ui_system_init(
-        lcd_service_get_panel(),
-        lcd_service_get_panel_io(),
-        NULL));
+    /* 获取面板句柄并传给 UI 系统；统一错误处理以便更明显地定位未初始化情况 */
+    esp_lcd_panel_handle_t panel = NULL;
+    esp_lcd_panel_io_handle_t panel_io = NULL;
+    ESP_ERROR_CHECK(lcd_service_get_panel(&panel));
+    ESP_ERROR_CHECK(lcd_service_get_panel_io(&panel_io));
+
+    ESP_ERROR_CHECK(ui_system_init(panel, panel_io, NULL));
 
     // 3. 初始化音频系统
     // ESP_LOGI(TAG, "Initializing audio system...");
@@ -86,43 +89,6 @@ void app_main(void)
 
     // ESP_LOGI(TAG, "=== System initialization completed ===");
     // ESP_LOGI(TAG, "System is running, waiting for events...");
-
-    // 创建全屏双色渐变背景对象
-    static lv_style_t style;
-    lv_style_init(&style);
-    lv_style_set_bg_opa(&style, LV_OPA_COVER);
-
-    static lv_grad_dsc_t grad;
-    grad.dir = LV_GRAD_DIR_LINEAR;
-    grad.stops_count = 2;                         // 只用两个颜色
-    grad.stops[0].color = lv_color_hex(0x051937); // 起始色
-    grad.stops[0].opa = LV_OPA_COVER;
-    grad.stops[0].frac = 0;
-    grad.stops[1].color = lv_color_hex(0xa8eb12); // 结束色
-    grad.stops[1].opa = LV_OPA_COVER;
-    grad.stops[1].frac = 255;
-
-    grad.extend = LV_GRAD_EXTEND_PAD;
-
-    // 设置渐变方向（比如 45 度，从左下到右上）
-    grad.params.linear.start.x = 0;
-    grad.params.linear.start.y = 412;
-    grad.params.linear.end.x = 412;
-    grad.params.linear.end.y = 0;
-
-    lv_style_set_bg_grad(&style, &grad);
-
-    lv_obj_t *bg = lv_obj_create(lv_screen_active());
-    lv_obj_set_size(bg, 412, 412);
-    lv_obj_add_style(bg, &style, 0);
-    lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_move_background(bg);
-
-    ESP_LOGI(TAG, "Background set to solid color #051937");
-
-    ESP_LOGI(TAG, "PSRAM: free=%d KB, largest=%d KB",
-             esp_get_free_heap_size() / 1024,
-             heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024);
 
     // 主循环 - 系统空闲
     while (1)

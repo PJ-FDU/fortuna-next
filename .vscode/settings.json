@@ -24,6 +24,11 @@
     "nvs_flash.h": "c",
     "esp_partition.h": "c",
     "esp_heap_caps.h": "c",
-    "lvgl.h": "c"
+    "lvgl.h": "c",
+    "lcd_service.h": "c",
+    "pcf85063a.h": "c",
+    "voice_overlay.h": "c",
+    "home.h": "c",
+    "ui_system_service.h": "c"
   }
 }
