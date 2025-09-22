@@ -29,6 +29,7 @@
     "pcf85063a.h": "c",
     "voice_overlay.h": "c",
     "home.h": "c",
-    "ui_system_service.h": "c"
+    "ui_system_service.h": "c",
+    "esp_spiffs.h": "c"
   }
 }

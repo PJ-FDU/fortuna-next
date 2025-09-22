@@ -3,8 +3,7 @@ set(SRCS
     "fortuna.c"
 
     # "qmi8658_complete_example.c"
-    "font/lv_font_pencil_24.c"
-    "font/lv_font_pencil_96.c"
+    "font/bacchus_extrabold_128.c"
 
     # LVGL界面
     "lvgl_screens/home.c"
@@ -63,6 +62,16 @@ idf_component_get_property(LVGL_LIB lvgl__lvgl COMPONENT_LIB)
 # 告诉 LVGL 去哪里找 lv_conf.h
 target_compile_definitions(${LVGL_LIB} PUBLIC LV_CONF_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h\")
 target_include_directories(${LVGL_LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Suppress -Werror=char-subscripts for the lvgl component so warnings from
+# third-party sources don't fail the whole build. This avoids modifying upstream
+# source files.
+if(TARGET ${LVGL_LIB})
+    target_compile_options(${LVGL_LIB} PRIVATE
+        -Wno-char-subscripts
+        -Wno-error=char-subscripts
+    )
+endif()
 
 # 设置编译器警告级别
 target_compile_options(${COMPONENT_LIB} PRIVATE

@@ -6,13 +6,16 @@
 #include "lvgl_screens/home.h"
 // #include "ui/voice_overlay.h"
 #include "esp_log.h"
+#include "string.h"
+#include "esp_spiffs.h"
+#include "esp_heap_caps.h"
+#include <dirent.h>
 
 #define SCREEN_SIZE 412
 #define RADIUS (SCREEN_SIZE / 2)
 
 static const char *TAG = "ui_system";
-LV_FONT_DECLARE(lv_font_montserrat_96);
-
+LV_FONT_DECLARE(bacchus_extrabold_128);
 
 /**
  * @brief 创建矩形区域并设置渐变背景
@@ -42,7 +45,7 @@ void create_gradient_rect(void)
     static lv_style_t style;
     lv_style_init(&style);
     lv_style_set_border_width(&style, 0);                  // 无边框
-    lv_style_set_bg_color(&style, lv_color_hex(0x008793)); // 背景色（备用）
+    lv_style_set_bg_color(&style, lv_color_hex(0x051937)); // 背景色（#051937）
     lv_style_set_bg_opa(&style, LV_OPA_COVER);             // 透明背景（使用自定义绘制）
     lv_style_set_pad_all(&style, 0);                       // 无内边距
 
@@ -51,16 +54,64 @@ void create_gradient_rect(void)
     /* 在 rect_obj 内创建中心时间标签 "12:34"，使用已编译的 Montserrat-48 字体 */
     lv_obj_t *time_label = lv_label_create(rect_obj);
     /* 使用已启用并编译进镜像的字体（montserrat_48） */
-    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_96, 0);
+    lv_obj_set_style_text_font(time_label, &bacchus_extrabold_128, 0);
     lv_obj_set_style_text_color(time_label, lv_color_hex(0xFFFFFF), 0);
     /* LV_OPA_20 太透明，改为覆盖不透明以保证可见 */
-    lv_obj_set_style_text_opa(time_label, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_opa(time_label, LV_OPA_50, 0);
     lv_label_set_text(time_label, "12:34");
     /* 居中时间标签到 rect_obj 中心 */
     lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 110);
 
     // 强制重绘
     lv_obj_invalidate(rect_obj);
+}
+
+/**
+ * @brief 确保 SPIFFS 已挂载，如果未挂载则注册并挂载到 /spiffs
+ */
+static esp_err_t ensure_spiffs_mounted(void)
+{
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = "spiffs",
+        .max_files = 5,
+        .format_if_mount_failed = false,
+    };
+
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret == ESP_ERR_INVALID_STATE)
+    {
+        /* Already mounted */
+        return ESP_OK;
+    }
+    return ret;
+}
+
+/**
+ * @brief 在当前屏幕上创建一个全屏图片背景，图片来自 SPIFFS 的 /spiffs/bg.png
+ * 图片尺寸恰好为 412x412，函数会创建 lv_image 并设置为填充容器中心
+ */
+void create_img_bg(void)
+{
+    /* 确保 SPIFFS 可用 */
+    esp_err_t err = ensure_spiffs_mounted();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "SPIFFS mount failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    lv_image_cache_resize(0, true);
+    lv_obj_t *scr = lv_scr_act();
+
+    /* 创建 image 对象，使用绝对路径从 SPIFFS 加载 */
+    lv_obj_t *img = lv_image_create(scr);
+    lv_image_set_src(img, "S:/bg_sm.png");
+    const int32_t w = lv_obj_get_self_width(img);
+    const int32_t h = lv_obj_get_self_height(img);
+    ESP_LOGI(TAG, "Background image size: %d x %d", w, h);
+    lv_obj_set_size(img, SCREEN_SIZE, SCREEN_SIZE);
+    lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
 }
 
 // 背景样式
@@ -98,7 +149,8 @@ esp_err_t ui_system_init(esp_lcd_panel_handle_t panel,
     // 初始化语音识别遮罩
     // voice_overlay_init();
 
-    create_gradient_rect();
+    /* 创建并显示背景图片（来自 SPIFFS /spiffs/bg.png） */
+    create_img_bg();
 
     lvgl_port_unlock();
 
