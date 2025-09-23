@@ -30,6 +30,18 @@
     "voice_overlay.h": "c",
     "home.h": "c",
     "ui_system_service.h": "c",
-    "esp_spiffs.h": "c"
+    "esp_spiffs.h": "c",
+    "i2c_service.h": "c",
+    "i2c_master.h": "c",
+    "esp_lcd_io_i2c.h": "c",
+    "semphr.h": "c",
+    "freertos.h": "c",
+    "lcd_touch_service.h": "c",
+    "bitset": "c",
+    "memory": "c",
+    "random": "c",
+    "future": "c",
+    "optional": "c",
+    "esp_vad.h": "c"
   }
 }

@@ -13,6 +13,7 @@
 #include "ui_system_service.h"
 // #include "audio_system_service.h"
 // #include "ui/voice_overlay.h"
+#include "lcd_touch_service.h"
 
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -28,6 +29,9 @@ static const char *TAG = "FORTUNA";
 
 #define WIFI_SSID "ziroom_3501A" // Wi-Fi 名称
 #define WIFI_PASS "4001001111"   // Wi-Fi 密码
+
+/* 原型：触摸测试任务 */
+void touch_test_task(void *arg);
 
 // VAD状态变化回调函数
 // static void on_vad_state_changed(bool vad_active)
@@ -78,6 +82,10 @@ void app_main(void)
     ESP_ERROR_CHECK(lcd_service_get_panel_io(&panel_io));
 
     ESP_ERROR_CHECK(ui_system_init(panel, panel_io, NULL));
+
+    /* ===== 触摸测试任务（每次触摸打印坐标） ===== */
+    ESP_LOGI(TAG, "Initializing touch service for test...");
+    esp_err_t ret = lcd_touch_service_init();
 
     // 3. 初始化音频系统
     // ESP_LOGI(TAG, "Initializing audio system...");

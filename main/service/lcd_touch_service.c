@@ -1,150 +1,110 @@
-#include "lcd_touch_service.h"
-
-#include "i2c_service.h"
-#include "io_expander_service.h"
-
-#include "esp_log.h"
+#include "driver/gpio.h"
+#include "driver/i2c_master.h"
 #include "esp_check.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "driver/gpio.h"
-#include "driver/i2c_master.h"
-
 #include "esp_lcd_io_i2c.h"
 #include "esp_lcd_touch.h"
-#include "esp_lcd_touch_spd2010.h" // 提供 ESP_LCD_TOUCH_IO_I2C_SPD2010_CONFIG()
+#include "esp_lcd_touch_spd2010.h"
+
+#include "i2c_service.h"
+#include "lcd_service.h"
+#include "lcd_touch_service.h"
+#include "io_expander_service.h"
 
 #define TAG "lcd_touch_service"
 
-/* ===== 静态句柄 ===== */
-static esp_lcd_touch_handle_t s_touch = NULL;
-static esp_lcd_panel_io_handle_t s_tp_io = NULL;
+static esp_lcd_touch_handle_t s_lcd_touch_handle = NULL;
+static esp_lcd_panel_io_handle_t s_lcd_panel_io_handle = NULL;
+static SemaphoreHandle_t s_lcd_touch_sem = NULL;
 
-/* ===== 内部工具函数 ===== */
-
-/* 用 TCA9554 将 TP RST 拉低/拉高（EIO = LCD_TOUCH_RST_EIO） */
-static void tp_reset_via_eio(void)
+static void IRAM_ATTR lcd_touch_service_isr_callback(esp_lcd_touch_handle_t lcd_touch_handle)
 {
-    // 设为输出
-    (void)esp_io_expander_set_dir(io_expander_handle, LCD_TOUCH_RST_EIO, IO_EXPANDER_OUTPUT);
-
-    // 低保持 >= 10ms
-    (void)esp_io_expander_set_level(io_expander_handle, LCD_TOUCH_RST_EIO, 0);
-    ESP_LOGI(TAG, "TP RST (EIO%d) -> LOW", LCD_TOUCH_RST_EIO);
-    vTaskDelay(pdMS_TO_TICKS(60));
-
-    // 拉高等待芯片稳定
-    (void)esp_io_expander_set_level(io_expander_handle, LCD_TOUCH_RST_EIO, 1);
-    ESP_LOGI(TAG, "TP RST (EIO%d) -> HIGH", LCD_TOUCH_RST_EIO);
-    vTaskDelay(pdMS_TO_TICKS(200));
-}
-
-/* 配置 INT GPIO（若使用） */
-static void tp_int_gpio_prepare(void)
-{
-#if (TOUCH_INT_GPIO >= 0)
-    gpio_config_t io = {
-        .pin_bit_mask = 1ULL << TOUCH_INT_GPIO,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = 1, // SPD2010 的 INT 通常为低有效，给上拉
-        .pull_down_en = 0,
-        .intr_type = GPIO_INTR_DISABLE};
-    (void)gpio_config(&io);
-
-    int lvl = gpio_get_level(TOUCH_INT_GPIO);
-    ESP_LOGI("TP-INT", "initial level=%d (0=LOW/active)", lvl);
-#else
-    // 未使用 INT，纯轮询
-#endif
-}
-
-/* 使用 IDF v5.5 自带的 “探测” API 扫描 I2C */
-static void i2c_scan_once(i2c_master_bus_handle_t bus)
-{
-#if TOUCH_SCAN_ON_BOOT
-    ESP_LOGI(TAG, "I2C scan start");
-    for (uint8_t a = 0x08; a < 0x78; ++a)
+    if (s_lcd_touch_sem)
     {
-        if (i2c_master_probe(bus, a, 1000) == ESP_OK)
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        xSemaphoreGiveFromISR(s_lcd_touch_sem, &xHigherPriorityTaskWoken);
+        if (xHigherPriorityTaskWoken == pdTRUE)
         {
-            ESP_LOGI(TAG, "  found device at 0x%02X%s",
-                     a,
-                     (a == TOUCH_I2C_ADDR ? " <- SPD2010?" : (a == 0x20 ? " <- TCA9554?" : "")));
+            portYIELD_FROM_ISR();
         }
     }
-    ESP_LOGI(TAG, "I2C scan end");
-#endif
 }
 
-/* 读一遍版本/状态（通过组件内部流程），仅打印，不影响功能 */
-static void tp_try_print_version(void)
+static esp_err_t lcd_touch_service_rst_exio_init(void)
 {
-    if (!s_touch)
-        return;
+    esp_io_expander_handle_t io_expander_handle = NULL;
+    esp_err_t err = esp_io_expander_service_get_handle(&io_expander_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "IO expander not ready, %s", esp_err_to_name(err));
+        return err;
+    }
 
-    /* 组件内部在创建时会读版本；这里做一次空读触发内部状态机 */
-    (void)esp_lcd_touch_read_data(s_touch);
+    ESP_ERROR_CHECK(esp_io_expander_set_dir(io_expander_handle, LCD_TOUCH_RST_EXIO, IO_EXPANDER_OUTPUT));
 
-    /* 实际坐标读取（若无触摸，则 cnt=0） */
-    uint16_t x[1], y[1], s[1];
-    uint8_t cnt = 0;
-    bool pressed = esp_lcd_touch_get_coordinates(s_touch, x, y, s, &cnt, 1);
-    ESP_LOGI(TAG, "TP first read: pressed=%d, cnt=%u%s",
-             (int)pressed, cnt, cnt ? " (OK)" : "");
+    ESP_ERROR_CHECK(esp_io_expander_set_level(io_expander_handle, LCD_TOUCH_RST_EXIO, 0));
+    vTaskDelay(pdMS_TO_TICKS(50));
+    ESP_ERROR_CHECK(esp_io_expander_set_level(io_expander_handle, LCD_TOUCH_RST_EXIO, 1));
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    ESP_LOGI(TAG, "TP RST (EIO%d) inited", LCD_TOUCH_RST_EXIO);
+
+    return ESP_OK;
 }
 
-/* ===== 对外函数实现 ===== */
-
-esp_lcd_touch_handle_t lcd_touch_service_get_handle(void)
+SemaphoreHandle_t lcd_touch_service_get_int_semaphore(void)
 {
-    return s_touch;
+    return s_lcd_touch_sem;
+}
+
+esp_err_t lcd_touch_service_get_handle(esp_lcd_touch_handle_t *lcd_touch_handle)
+{
+    if (lcd_touch_handle == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_lcd_touch_handle == NULL)
+    {
+        *lcd_touch_handle = NULL;
+        return ESP_ERR_INVALID_STATE;
+    }
+    *lcd_touch_handle = s_lcd_touch_handle;
+    return ESP_OK;
 }
 
 esp_err_t lcd_touch_service_init(void)
 {
-    ESP_RETURN_ON_FALSE(s_touch == NULL, ESP_ERR_INVALID_STATE, TAG, "touch already inited");
+    ESP_LOGI(TAG, "Init LCD touch");
 
-    /* 1) 通过 TCA9554 复位触摸 */
-    tp_reset_via_eio();
+    ESP_ERROR_CHECK(lcd_touch_service_rst_exio_init());
+    vTaskDelay(pdMS_TO_TICKS(300));
 
-    /* 1.5) 额外等待时间，确保芯片完全启动 */
-    vTaskDelay(pdMS_TO_TICKS(300));  // 额外300ms等待
-    ESP_LOGI(TAG, "Waiting for SPD2010 to be ready...");
+    i2c_master_bus_handle_t i2c_master_bus_handle = NULL;
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_PORT_NUM, &i2c_master_bus_handle));
 
-    /* 2) 取 I2C 主总线 */
-    i2c_master_bus_handle_t bus = NULL;
-    ESP_RETURN_ON_ERROR(i2c_master_get_bus_handle(PIN_I2C_PORT, &bus), TAG, "get i2c bus");
+    esp_lcd_panel_io_i2c_config_t lcd_panel_io_i2c_config = ESP_LCD_TOUCH_IO_I2C_SPD2010_CONFIG();
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &lcd_panel_io_i2c_config, &s_lcd_panel_io_handle));
 
-    /* 3) 诊断：扫描总线（可关） */
-    i2c_scan_once(bus);
-
-    /* 4) 创建 I2C 面板 IO（手动配置以解决通信问题） */
-    esp_lcd_panel_io_i2c_config_t io_cfg = {
-        .dev_addr = TOUCH_I2C_ADDR,
-        .scl_speed_hz = TOUCH_I2C_CLK_HZ,
-        .control_phase_bytes = 0,    // SPD2010 不需要控制字节
-        .lcd_cmd_bits = 8,           // 命令8位
-        .lcd_param_bits = 8,         // 参数8位
-        .dc_bit_offset = 0,          // 无DC位
-        .flags = {
-            .dc_low_on_data = 0,     // 数据时DC保持高
-            .disable_control_phase = 1,  // 禁用控制阶段，直接传输数据
-        },
+    gpio_config_t gpio_cfg = {
+        .pin_bit_mask = 1ULL << LCD_TOUCH_INT_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = 1,
+        .pull_down_en = 0,
+        .intr_type = GPIO_INTR_DISABLE,
     };
+    ESP_ERROR_CHECK(gpio_config(&gpio_cfg));
 
-    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c_v2(bus, &io_cfg, &s_tp_io),
-                        TAG, "new_panel_io_i2c_v2");
-
-    /* 5) 创建 SPD2010 触摸句柄 */
-    esp_lcd_touch_config_t tcfg = {
-        .x_max = 412,
-        .y_max = 412,
-        .rst_gpio_num = -1,             // 复位走 TCA9554，这里设 -1
-        .int_gpio_num = TOUCH_INT_GPIO, // 若未接中断则为 -1
+    esp_lcd_touch_config_t lcd_touch_config = {
+        .x_max = LCD_H_RES,
+        .y_max = LCD_V_RES,
+        .rst_gpio_num = GPIO_NUM_NC,
+        .int_gpio_num = LCD_TOUCH_INT_GPIO,
         .levels = {
-            .reset = 0,     // 默认低复位；我们未使用
-            .interrupt = 0, // SPD2010 INT 通常低有效
+            .reset = 0,
+            .interrupt = 0,
         },
         .flags = {
             .swap_xy = 0,
@@ -152,20 +112,17 @@ esp_err_t lcd_touch_service_init(void)
             .mirror_y = 0,
         },
     };
-    tp_int_gpio_prepare();
+    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_spd2010(s_lcd_panel_io_handle, &lcd_touch_config, &s_lcd_touch_handle));
 
-    ESP_RETURN_ON_ERROR(esp_lcd_touch_new_i2c_spd2010(s_tp_io, &tcfg, &s_touch),
-                        TAG, "new tp");
+    s_lcd_touch_sem = xSemaphoreCreateBinary();
+    if (s_lcd_touch_sem == NULL)
+    {
+        ESP_LOGE(TAG, "failed to create touch semaphore");
+        return ESP_ERR_NO_MEM;
+    }
+    ESP_ERROR_CHECK(esp_lcd_touch_register_interrupt_callback_with_data(s_lcd_touch_handle, lcd_touch_service_isr_callback, NULL));
 
-    /* 6) 额外打一遍版本/状态（可选） */
-    tp_try_print_version();
+    ESP_LOGI(TAG, "LCD touch inited");
 
-    ESP_LOGI(TAG, "SPD2010 touch ready (addr=0x%02X, int_gpio=%d, rst_eio=%d)",
-             TOUCH_I2C_ADDR, TOUCH_INT_GPIO, LCD_TOUCH_RST_EIO);
     return ESP_OK;
-}
-
-void lcd_touch_service_debug_once(void)
-{
-    tp_try_print_version();
 }

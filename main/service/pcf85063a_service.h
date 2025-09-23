@@ -9,35 +9,35 @@ extern "C"
 
 #include "pcf85063a.h"
 
-/*
- * Initialize the PCF85063A service.
- * - Obtains the I2C bus handle and initializes the underlying driver.
- * - Attempts to read the RTC time; if the device returns an invalid time,
- *   a reasonable default time is written.
- * - This function is idempotent: calling it when the service is already
- *   initialized will return ESP_OK and do nothing.
+/**
+ * @brief 初始化 PCF85063A 服务
+ *
+ * - 获取 I2C 总线句柄并初始化底层驱动
+ * - 尝试读取 RTC 时间；如果设备返回无效时间，则写入合理的默认时间
+ * - 本函数可重入（idempotent）：若服务已初始化则返回 ESP_OK 并不做重复初始化
  */
 esp_err_t pcf85063a_service_init(void);
 
-/*
- * Read-only access to RTC time (thread-safe).
- * - Reads the cached datetime filled during init or after a successful write.
- * - This is intentionally a cached read to avoid doing I2C on every call.
- * - Returns ESP_ERR_INVALID_STATE if the service is not initialized.
+/**
+ * @brief 读取缓存的 RTC 时间（线程安全）
+ *
+ * - 读取在初始化或写入后填充的缓存时间，以避免每次调用都进行 I2C 读取
+ * - 若服务未初始化，返回 ESP_ERR_INVALID_STATE
  */
 esp_err_t pcf85063a_service_read_datetime(pcf85063a_datetime_t *out_dt);
 
-/*
- * Write time to RTC (thread-safe).
- * - Writes the provided datetime to the device and updates the internal cache
- *   on success.
- * - The write is serialized with the read cache via an internal mutex.
+/**
+ * @brief 写入 RTC 时间（线程安全）
+ *
+ * - 将提供的时间写入设备，成功后更新内部缓存
+ * - 写操作与读缓存通过内部互斥保护序列化
  */
 esp_err_t pcf85063a_service_write_datetime(const pcf85063a_datetime_t *in_dt);
 
-/*
- * Teardown service: deinit device and free resources.
- * - Safe to call multiple times; subsequent calls are no-ops.
+/**
+ * @brief 卸载/关闭服务并释放资源
+ *
+ * - 可安全多次调用；后续调用为 no-op
  */
 esp_err_t pcf85063a_service_teardown(void);
 

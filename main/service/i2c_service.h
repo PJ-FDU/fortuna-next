@@ -9,20 +9,14 @@ extern "C"
 #include "driver/i2c_master.h"
 #include "esp_err.h"
 
-#define PIN_I2C_PORT I2C_NUM_0
-#define PIN_I2C_SCL GPIO_NUM_10
-#define PIN_I2C_SDA GPIO_NUM_11
+#define I2C_PORT_NUM I2C_NUM_0
+#define I2C_SCL_GPIO GPIO_NUM_10
+#define I2C_SDA_GPIO GPIO_NUM_11
+#define I2C_CLK_SRC I2C_CLK_SRC_DEFAULT
+#define I2C_CLK_HZ 400000
+#define I2C_GLITCH_IGNORE_CNT 7
 
-#define I2C_SPEED_HZ 400000
-
-    /**
-     * @brief 初始化 I2C 主总线
-     *
-     * @return ESP_OK 成功
-     */
     esp_err_t esp_i2c_service_init(void);
-
-    // Use driver-provided i2c_master_get_bus_handle() directly; no wrapper here.
 
 #ifdef __cplusplus
 }

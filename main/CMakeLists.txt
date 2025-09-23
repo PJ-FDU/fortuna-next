@@ -40,7 +40,7 @@ set(INCLUDE_DIRS
     "."
     "font"
     "service"
-    "data"
+    # "data"
     # "lvgl_screens"
     # "ui"
 )

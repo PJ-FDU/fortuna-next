@@ -21,9 +21,16 @@ qmi8658_data_t qmi_data;
 
 esp_err_t qmi8658_service_init(void)
 {
+    esp_io_expander_handle_t io_expander_handle = NULL;
+    esp_err_t err = esp_io_expander_service_get_handle(&io_expander_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "IO expander not ready, %s", esp_err_to_name(err));
+        return err;
+    }
 
     i2c_master_bus_handle_t i2c_master_bus_handle = NULL;
-    ESP_ERROR_CHECK(i2c_master_get_bus_handle(PIN_I2C_PORT, &i2c_master_bus_handle));
+    ESP_ERROR_CHECK(i2c_master_get_bus_handle(I2C_PORT_NUM, &i2c_master_bus_handle));
 
     ESP_ERROR_CHECK(esp_io_expander_set_dir(io_expander_handle, (1u << TCA_PIN_IMU_INT1), 0));
     ESP_ERROR_CHECK(esp_io_expander_set_dir(io_expander_handle, (1u << TCA_PIN_IMU_INT2), 0));
@@ -45,7 +52,16 @@ esp_err_t qmi8658_service_init(void)
 
 void qmi8658_task(void *arg)
 {
+
     ESP_LOGI(TAG, "QMI8658 task started");
+
+    esp_io_expander_handle_t io_expander_handle = NULL;
+    esp_err_t err = esp_io_expander_service_get_handle(&io_expander_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "IO expander not ready, %s", esp_err_to_name(err));
+        return;
+    }
 
     int last1 = 1, last2 = 1;
     int64_t t_prev = esp_timer_get_time();

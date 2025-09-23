@@ -32,7 +32,7 @@ esp_err_t pcf85063a_service_init(void)
     }
 
     // 获取 I2C 总线句柄（i2c_service 应提供安全 getter）
-    err = i2c_master_get_bus_handle(PIN_I2C_PORT, &i2c_master_bus_handle);
+    err = i2c_master_get_bus_handle(I2C_PORT_NUM, &i2c_master_bus_handle);
     ESP_ERROR_CHECK(err);
 
     // 初始化 PCF85063A 设备结构
