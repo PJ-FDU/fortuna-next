@@ -5,24 +5,55 @@
 #include "esp_heap_caps.h"
 #include "esp_err.h"
 #include "esp_check.h"
+#include "lcd_touch_service.h"
 
-/* Module tag for logging */
+/* 模块日志标识 */
 static const char *TAG = "lvgl_service";
 
 /*
- * Internal module-owned handles
- * - s_disp: LVGL display object returned by the esp_lvgl_port layer.
- * - s_indev: LVGL input device for touch (optional, NULL if no touch registered).
+ * 模块内部持有的句柄
+ * - s_disp: 由 esp_lvgl_port 层返回的 LVGL 显示对象句柄
+ * - s_indev: LVGL 的触摸输入设备句柄（可选，未注册时为 NULL）
  *
- * Ownership: these handles are owned by the lvgl_service module. Callers must not
- * free them. Use the safe getters below to obtain the handles.
+ * 所有权：这些句柄由 lvgl_service 模块拥有，调用方不得释放它们。
+ * 如需访问请使用下面提供的安全 getter 接口。
  */
 static lv_display_t *s_disp = NULL;
 static lv_indev_t *s_indev = NULL;
 
-/* SPD2010 要求：物理 X 方向以 4 像素对齐
- *  LVGL9 不再有 rounder_cb，改为在 LV_EVENT_INVALIDATE_AREA 里调整刷新区域
- *  注意：我们**没有**做 panel 的 swap_xy（SPD2010 不支持），所以这里始终对齐 X。
+/* Task bridge: wait on lcd_touch_service semaphore (interrupt-driven) and wake LVGL task
+ * so that LVGL will call the registered read_cb to fetch touch coordinates.
+ */
+static TaskHandle_t s_lvgl_touch_bridge_task = NULL;
+static void lvgl_touch_bridge_task(void *arg)
+{
+    SemaphoreHandle_t sem = (SemaphoreHandle_t)arg;
+    if (sem == NULL)
+    {
+        vTaskDelete(NULL);
+        return;
+    }
+
+    for (;;)
+    {
+        if (xSemaphoreTake(sem, portMAX_DELAY) == pdTRUE)
+        {
+            ESP_LOGI(TAG, "lvgl_touch_bridge: semaphore taken");
+            if (s_indev)
+            {
+                /* 唤醒 LVGL 任务以处理触摸；lvgl_port_task_wake 由 esp_lvgl_port 提供 */
+                lvgl_port_task_wake(LVGL_PORT_EVENT_TOUCH, s_indev);
+                ESP_LOGI(TAG, "lvgl_touch_bridge: lvgl_port_task_wake called");
+            }
+        }
+    }
+}
+
+/*
+ * SPD2010 面板要求：物理 X 方向的绘制区域需按 4 像素对齐。
+ * LVGL9 不再使用 rounder_cb，因此在 LV_EVENT_INVALIDATE_AREA 事件中
+ * 对要刷新的区域进行对齐处理。
+ * 注意：本项目没有对 panel 进行 swap_xy（SPD2010 不支持），因此只对 X 方向对齐。
  */
 static void spd2010_rounder_event_cb(lv_event_t *e)
 {
@@ -41,25 +72,22 @@ static void spd2010_rounder_event_cb(lv_event_t *e)
 }
 
 /**
- * @brief Initialize LVGL + esp_lvgl_port and register the display/touch
+ * @brief 初始化 LVGL 与 esp_lvgl_port 并注册显示与触摸
  *
- * Notes on error behavior:
- * - This function uses ESP_ERROR_CHECK for critical initialization steps. If any
- *   of those calls fail, the macro will assert/abort (depending on IDF
- *   configuration). That means initialization failures are treated as fatal
- *   conditions here. If you prefer non-fatal behavior (returning the error to
- *   the caller), replace those ESP_ERROR_CHECK calls with explicit checks and
- *   return appropriate esp_err_t values.
+ * 关于错误处理：
+ * - 本函数在关键初始化步骤使用 ESP_ERROR_CHECK。若这些调用失败，
+ *   宏将根据 IDF 配置触发断言/中止（assert/abort）。因此在此将初始化
+ *   失败视为致命错误。如果希望采用非致命的方式（返回错误给调用方），
+ *   请将 ESP_ERROR_CHECK 替换为显式的错误检查并返回相应的 esp_err_t。
  *
- * Parameters:
- *  - panel: already-created & configured esp_lcd_panel_handle_t (must be non-NULL)
- *  - io: associated esp_lcd_panel_io_handle_t for the panel (must be non-NULL)
- *  - touch: optional touch handle (NULL to disable touch)
+ * 参数：
+ *  - panel: 已创建并配置的 esp_lcd_panel_handle_t（不能为空）
+ *  - io: 与 panel 关联的 esp_lcd_panel_io_handle_t（不能为空）
+ *  - touch: 可选的触摸句柄（传 NULL 则禁用触摸）
  *
- * Returns:
- *  - ESP_OK on success (LVGL initialized and display registered)
- *  - If an error occurs and ESP_ERROR_CHECK is not configured to abort, a
- *    non-ESP_OK value may be returned; otherwise the system will assert/abort.
+ * 返回：
+ *  - 成功返回 ESP_OK（LVGL 初始化并注册显示成功）
+ *  - 若发生错误且 ESP_ERROR_CHECK 不触发中止，会返回对应的错误码
  */
 esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
                             esp_lcd_panel_io_handle_t io,
@@ -80,8 +108,9 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
     /* lvgl_port_init 为关键步骤，失败时按策略使用 ESP_ERROR_CHECK 处理 */
     ESP_ERROR_CHECK(lvgl_port_init(&port_cfg));
 
-    /* 2) 注册显示（使用条带缓冲；XRGB8888 支持透明通道，转换到RGB888面板；不做 SW 旋转） */
-    /* 2) 注册显示（使用条带缓冲；buffer_size 根据宏计算） */
+    /* 2) 注册显示（使用条带缓冲；buffer_size 根据宏计算）
+     * 注：使用条带缓冲可以在节省内存的同时保证一定的刷新吞吐量。
+     */
     size_t buffer_size = (size_t)LCD_H_RES * LVGL_DISP_BUFFER_LINES * LVGL_COLOR_BYTES;
     lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io,
@@ -120,10 +149,10 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
     /* 如果注册失败，这里使用 ESP_ERROR_CHECK 以便在开发/测试阶段揭露问题 */
     ESP_ERROR_CHECK(s_disp != NULL ? ESP_OK : ESP_FAIL);
 
-    /* 3) SPD2010 的 4 像素 X 对齐：注册到 LVGL 9 的 INVALIDATE 事件 */
+    /* 3) SPD2010 的 X 方向 4 像素对齐：注册到 LVGL9 的 INVALIDATE 事件 */
     lv_display_add_event_cb(s_disp, spd2010_rounder_event_cb, LV_EVENT_INVALIDATE_AREA, NULL);
 
-    /* 4) 触摸（若传入句柄则注册） */
+    /* 4) 触摸注册（若传入触摸句柄则注册） */
     if (touch)
     {
         const lvgl_port_touch_cfg_t tcfg = {
@@ -134,6 +163,25 @@ esp_err_t lvgl_service_init(esp_lcd_panel_handle_t panel,
         if (!s_indev)
         {
             ESP_LOGW(TAG, "lvgl_port_add_touch failed, continue without input");
+        }
+        else
+        {
+            /* If the touch driver uses an interrupt semaphore, create a bridge task that
+             * waits on that semaphore and wakes LVGL when an interrupt occurs. This
+             * supports the project's lcd_touch_service which provides a semaphore.
+             */
+            SemaphoreHandle_t tp_sem = lcd_touch_service_get_int_semaphore();
+            if (tp_sem != NULL)
+            {
+                if (s_lvgl_touch_bridge_task == NULL)
+                {
+                    BaseType_t ret = xTaskCreatePinnedToCore(lvgl_touch_bridge_task, "lvgl_tp_bridge", 2048, (void *)tp_sem, tcfg.disp ? 5 : 3, &s_lvgl_touch_bridge_task, tcfg.disp ? 0 : tskNO_AFFINITY);
+                    if (ret != pdPASS)
+                    {
+                        ESP_LOGW(TAG, "Failed to create lvgl touch bridge task");
+                    }
+                }
+            }
         }
     }
 

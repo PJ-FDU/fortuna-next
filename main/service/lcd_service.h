@@ -1,12 +1,13 @@
 #pragma once
 
-#include "esp_err.h"
+#include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "driver/spi_master.h"
+#include "esp_err.h"
+#include "esp_io_expander.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_spd2010.h"
-#include "driver/ledc.h"
-#include "driver/gpio.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -32,7 +33,7 @@ extern "C"
 #define LCD_D3_GPIO (GPIO_NUM_41)
 #define LCD_CS_GPIO (GPIO_NUM_21)
 
-#define LCD_RST_EXIO (2)
+#define LCD_RST_EXIO (IO_EXPANDER_PIN_NUM_1)
 
 #define LCD_BL_PWM_LEVEL (1)
 #define LCD_BL_PWM_BRIGHTNESS_MIN (0)

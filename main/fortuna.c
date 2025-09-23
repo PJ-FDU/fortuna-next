@@ -72,20 +72,18 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_i2c_service_init());
     ESP_ERROR_CHECK(esp_io_expander_service_init());
     ESP_ERROR_CHECK(lcd_service_init());
+    ESP_ERROR_CHECK(lcd_touch_service_init());
 
     // 2. 初始化UI系统
     ESP_LOGI(TAG, "Initializing UI system...");
     /* 获取面板句柄并传给 UI 系统；统一错误处理以便更明显地定位未初始化情况 */
     esp_lcd_panel_handle_t panel = NULL;
     esp_lcd_panel_io_handle_t panel_io = NULL;
+    esp_lcd_touch_handle_t touch = NULL;
     ESP_ERROR_CHECK(lcd_service_get_panel(&panel));
     ESP_ERROR_CHECK(lcd_service_get_panel_io(&panel_io));
-
-    ESP_ERROR_CHECK(ui_system_init(panel, panel_io, NULL));
-
-    /* ===== 触摸测试任务（每次触摸打印坐标） ===== */
-    ESP_LOGI(TAG, "Initializing touch service for test...");
-    esp_err_t ret = lcd_touch_service_init();
+    ESP_ERROR_CHECK(lcd_touch_service_get_handle(&touch));
+    ESP_ERROR_CHECK(ui_system_init(panel, panel_io, touch));
 
     // 3. 初始化音频系统
     // ESP_LOGI(TAG, "Initializing audio system...");

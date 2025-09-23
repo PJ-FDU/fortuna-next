@@ -114,6 +114,32 @@ void create_img_bg(void)
     lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
 }
 
+// 全屏点击事件回调：在串口输出点击坐标
+static void full_screen_click_event_cb(lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CLICKED || code == LV_EVENT_PRESSED || code == LV_EVENT_RELEASED)
+    {
+        lv_point_t p;
+        lv_obj_t *target = lv_event_get_target(e);
+        /* 将事件坐标转换为屏幕坐标 */
+        lv_indev_t *indev = lv_indev_get_act();
+        if (indev)
+        {
+            lv_indev_get_point(indev, &p);
+            ESP_LOGI(TAG, "Screen click event: x=%d, y=%d, code=%d", p.x, p.y, code);
+        }
+        else
+        {
+            /* 退回到读取对象坐标作为降级方案 */
+            lv_area_t coords;
+            lv_obj_get_coords(target, &coords);
+            ESP_LOGI(TAG, "Screen click (no indev): obj coords: x1=%d,y1=%d,x2=%d,y2=%d, code=%d",
+                     coords.x1, coords.y1, coords.x2, coords.y2, code);
+        }
+    }
+}
+
 // 背景样式
 // static lv_style_t style_scr_bg;
 
@@ -151,6 +177,17 @@ esp_err_t ui_system_init(esp_lcd_panel_handle_t panel,
 
     /* 创建并显示背景图片（来自 SPIFFS /spiffs/bg.png） */
     create_img_bg();
+
+    /* 注册全屏点击事件回调，监听点击并在串口输出坐标 */
+    lv_obj_t *scr = lv_scr_act();
+    if (scr)
+    {
+        /* 监听 LV_EVENT_CLICKED 事件（也可监听 PRESSED/RELEASED，根据需要） */
+        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_CLICKED, NULL);
+        /* 同时监听按下与释放以获得更多信息 */
+        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_PRESSED, NULL);
+        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_RELEASED, NULL);
+    }
 
     lvgl_port_unlock();
 

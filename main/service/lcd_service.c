@@ -27,7 +27,7 @@ static esp_err_t lcd_service_rst_exio_init(void)
         return err;
     }
 
-    ESP_ERROR_CHECK(esp_io_expander_set_dir(io_expander_handle, LCD_RST_EXIO, GPIO_MODE_OUTPUT));
+    ESP_ERROR_CHECK(esp_io_expander_set_dir(io_expander_handle, LCD_RST_EXIO, IO_EXPANDER_OUTPUT));
 
     ESP_ERROR_CHECK(esp_io_expander_set_level(io_expander_handle, LCD_RST_EXIO, 0));
     vTaskDelay(pdMS_TO_TICKS(100));
