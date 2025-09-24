@@ -4,6 +4,8 @@ set(SRCS
 
     # "qmi8658_complete_example.c"
     "font/bacchus_extrabold_128.c"
+    "font/bacchus_extrabold_96.c"
+    "font/lv_font_montserrat_96.c"
 
     # LVGL界面
     "lvgl_screens/home.c"

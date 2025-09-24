@@ -15,6 +15,7 @@
 #define RADIUS (SCREEN_SIZE / 2)
 
 static const char *TAG = "ui_system";
+LV_FONT_DECLARE(bacchus_extrabold_96);
 LV_FONT_DECLARE(bacchus_extrabold_128);
 
 /**
@@ -41,24 +42,35 @@ void create_gradient_rect(void)
     ESP_LOGI(TAG, "rect_obj size (after remove_style & set_size): %d x %d", lv_obj_get_width(rect_obj), lv_obj_get_height(rect_obj));
     ESP_LOGI(TAG, "rect_obj pos after align (after remove_style & set_size): (%d, %d)", lv_obj_get_x(rect_obj), lv_obj_get_y(rect_obj));
 
-    // 设置矩形区域的基本样式
-    static lv_style_t style;
-    lv_style_init(&style);
-    lv_style_set_border_width(&style, 0);                  // 无边框
-    lv_style_set_bg_color(&style, lv_color_hex(0x051937)); // 背景色（#051937）
-    lv_style_set_bg_opa(&style, LV_OPA_COVER);             // 透明背景（使用自定义绘制）
-    lv_style_set_pad_all(&style, 0);                       // 无内边距
+    /* 使用 45° 线性渐变背景（从左上到右下），使用反射扩展以实现平滑过渡）*/
+    /* linear-gradient(90deg, #3F2B96 0%, #A8C0FF 100%) but mapped from left-bottom to right-top */
+    static const lv_color_t grad_colors[2] = {
+        LV_COLOR_MAKE(0x3F, 0x2B, 0x96), /* #3F2B96 */
+        LV_COLOR_MAKE(0xA8, 0xC0, 0xFF), /* #A8C0FF */
+    };
 
-    lv_obj_add_style(rect_obj, &style, 0);
+    static lv_style_t style_with_linear_gradient_bg;
+    static lv_grad_dsc_t linear_gradient_dsc; /* gradient descriptor must be static */
+
+    lv_style_init(&style_with_linear_gradient_bg);
+    lv_grad_init_stops(&linear_gradient_dsc, grad_colors, NULL, NULL, sizeof(grad_colors) / sizeof(lv_color_t));
+    /* 从左下 (0%,100%) 到右上 (100%,0%)，即从左下角到右上角的对角线 */
+    lv_grad_linear_init(&linear_gradient_dsc, lv_pct(0), lv_pct(100), lv_pct(100), lv_pct(0), LV_GRAD_EXTEND_REFLECT);
+    lv_style_set_bg_grad(&style_with_linear_gradient_bg, &linear_gradient_dsc);
+    lv_style_set_bg_opa(&style_with_linear_gradient_bg, LV_OPA_COVER);
+    lv_style_set_border_width(&style_with_linear_gradient_bg, 0);
+    lv_style_set_pad_all(&style_with_linear_gradient_bg, 0);
+
+    lv_obj_add_style(rect_obj, &style_with_linear_gradient_bg, 0);
 
     /* 在 rect_obj 内创建中心时间标签 "12:34"，使用已编译的 Montserrat-48 字体 */
     lv_obj_t *time_label = lv_label_create(rect_obj);
     /* 使用已启用并编译进镜像的字体（montserrat_48） */
-    lv_obj_set_style_text_font(time_label, &bacchus_extrabold_128, 0);
+    lv_obj_set_style_text_font(time_label, &bacchus_extrabold_96, 0);
     lv_obj_set_style_text_color(time_label, lv_color_hex(0xFFFFFF), 0);
     /* LV_OPA_20 太透明，改为覆盖不透明以保证可见 */
     lv_obj_set_style_text_opa(time_label, LV_OPA_50, 0);
-    lv_label_set_text(time_label, "12:34");
+    lv_label_set_text(time_label, "09:49");
     /* 居中时间标签到 rect_obj 中心 */
     lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 110);
 
@@ -114,32 +126,6 @@ void create_img_bg(void)
     lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
 }
 
-// 全屏点击事件回调：在串口输出点击坐标
-static void full_screen_click_event_cb(lv_event_t *e)
-{
-    lv_event_code_t code = lv_event_get_code(e);
-    if (code == LV_EVENT_CLICKED || code == LV_EVENT_PRESSED || code == LV_EVENT_RELEASED)
-    {
-        lv_point_t p;
-        lv_obj_t *target = lv_event_get_target(e);
-        /* 将事件坐标转换为屏幕坐标 */
-        lv_indev_t *indev = lv_indev_get_act();
-        if (indev)
-        {
-            lv_indev_get_point(indev, &p);
-            ESP_LOGI(TAG, "Screen click event: x=%d, y=%d, code=%d", p.x, p.y, code);
-        }
-        else
-        {
-            /* 退回到读取对象坐标作为降级方案 */
-            lv_area_t coords;
-            lv_obj_get_coords(target, &coords);
-            ESP_LOGI(TAG, "Screen click (no indev): obj coords: x1=%d,y1=%d,x2=%d,y2=%d, code=%d",
-                     coords.x1, coords.y1, coords.x2, coords.y2, code);
-        }
-    }
-}
-
 // 背景样式
 // static lv_style_t style_scr_bg;
 
@@ -176,18 +162,9 @@ esp_err_t ui_system_init(esp_lcd_panel_handle_t panel,
     // voice_overlay_init();
 
     /* 创建并显示背景图片（来自 SPIFFS /spiffs/bg.png） */
-    create_img_bg();
+    // create_img_bg();
 
-    /* 注册全屏点击事件回调，监听点击并在串口输出坐标 */
-    lv_obj_t *scr = lv_scr_act();
-    if (scr)
-    {
-        /* 监听 LV_EVENT_CLICKED 事件（也可监听 PRESSED/RELEASED，根据需要） */
-        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_CLICKED, NULL);
-        /* 同时监听按下与释放以获得更多信息 */
-        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_PRESSED, NULL);
-        lv_obj_add_event_cb(scr, full_screen_click_event_cb, LV_EVENT_RELEASED, NULL);
-    }
+    create_gradient_rect();
 
     lvgl_port_unlock();
 
