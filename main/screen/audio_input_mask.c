@@ -23,7 +23,7 @@ esp_err_t show_audio_input_mask(void)
     lv_obj_set_style_clip_corner(s_audio_input_mask, true, 0);
     lv_obj_set_style_bg_color(s_audio_input_mask, lv_color_hex(0x000000), 0);
     /* 35% opacity ≈ 0.35 * 255 = 89 */
-    lv_obj_set_style_bg_opa(s_audio_input_mask, LV_OPA_70, 0);
+    lv_obj_set_style_bg_opa(s_audio_input_mask, LV_OPA_90, 0);
     lv_obj_invalidate(s_audio_input_mask);
     return ESP_OK;
 }

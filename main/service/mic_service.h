@@ -1,65 +1,47 @@
-#ifndef MIC_SERVICE_H
-#define MIC_SERVICE_H
-
-#include "esp_err.h"
-#include <stdint.h>
+#pragma once
 #include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "esp_err.h"
+#include "driver/gpio.h"
+#include "driver/i2s_std.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-// 定义每帧最大字节数，确保结构体大小固定
-#define MIC_FRAME_BYTES_MAX (2048)
+    /* 唤醒后音频帧回调（PCM16 单声道） */
+    typedef void (*mic_on_audio_cb_t)(const int16_t *pcm, size_t samples);
 
-    /**
-     * @brief 音频帧结构体
-     *
-     * 用于在队列中传递音频数据。
-     */
     typedef struct
     {
-        size_t nbytes;                     /**< 当前帧的有效字节数 */
-        uint8_t data[MIC_FRAME_BYTES_MAX]; /**< 音频数据缓冲区 */
-    } mic_frame_t;
+        // I2S（麦克风）引脚：默认 WS=GPIO2, BCLK=GPIO15, DIN=GPIO39
+        i2s_port_t rx_port;
+        gpio_num_t gpio_bclk;
+        gpio_num_t gpio_ws;
+        gpio_num_t gpio_din;
+        gpio_num_t gpio_mclk;
 
-    /**
-     * @brief 启动麦克风 WebSocket 服务
-     *
-     * 初始化并连接到 WebSocket 服务器，准备发送音频数据。
-     *
-     * @return
-     *      - ESP_OK: 成功
-     *      - 其他: 失败
-     */
-    esp_err_t mic_service_start(void);
+        int sample_rate;                // 16000
+        i2s_data_bit_width_t data_bits; // 推荐 32（容器），或 16（已确认时）
+        i2s_slot_mode_t slot_mode;      // I2S_SLOT_MODE_MONO
+        i2s_std_slot_mask_t slot_mask;  // I2S_STD_SLOT_RIGHT（或 LEFT）
+        int frame_ms;                   // 仅用于日志/回退节拍，真正以 AFE chunk 为准
+        int shift_bits;                 // 32→16 的右移量（常用 14/16）
+        int print_head;                 // 调试帧头打印次数
 
-    /**
-     * @brief 停止麦克风 WebSocket 服务
-     *
-     * 断开连接并释放所有相关资源。
-     */
+        // AFE 行为
+        int awake_silence_back_ms; // 唤醒后静音多久回退（默认 800ms）
+    } mic_service_cfg_t;
+
+    esp_err_t mic_service_start(const mic_service_cfg_t *cfg);
     void mic_service_stop(void);
 
-    /**
-     * @brief 发送一帧 PCM16 音频数据
-     *
-     * 将采集到的 PCM 数据放入发送队列，由后台任务发送出去。
-     * 这是一个非阻塞函数，如果队列已满，会立即返回错误。
-     *
-     * @param pcm       指向 PCM16 数据的指针
-     * @param nsamples  样本数 (不是字节数)
-     *
-     * @return
-     *      - ESP_OK: 成功放入队列
-     *      - ESP_ERR_INVALID_STATE: 服务未运行
-     *      - ESP_ERR_TIMEOUT: 队列已满，数据被丢弃
-     */
-    esp_err_t mic_service_send_pcm16(const int16_t *pcm, size_t nsamples);
+    void mic_service_set_callback(mic_on_audio_cb_t cb);
+    bool mic_service_is_awake(void);
+    void mic_service_sleep(void);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif // MIC_SERVICE_H

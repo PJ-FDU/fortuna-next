@@ -1,6 +1,10 @@
 #pragma once
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include "esp_err.h"
 #include "driver/i2s_std.h"
+#include "driver/gpio.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -9,48 +13,38 @@ extern "C"
 
     typedef struct
     {
-        i2s_port_t port; // I2S_NUM_0 / I2S_NUM_1
-        int gpio_bclk;   // BCLK
-        int gpio_ws;     // LRCK/WS
-        int gpio_din;    // DIN
-        int gpio_mclk;   // 如无可用 I2S_GPIO_UNUSED
-        int gpio_dout;   // 采集用不到，I2S_GPIO_UNUSED
-
-        uint32_t sample_rate;           // 例如 16000
-        i2s_data_bit_width_t data_bits; // 容器位宽，常见 I2S_DATA_BIT_WIDTH_32BIT
+        i2s_port_t port;
+        int sample_rate;
+        i2s_data_bit_width_t data_bits; // 推荐 32bit 容器
         i2s_slot_mode_t slot_mode;      // I2S_SLOT_MODE_MONO
-        i2s_std_slot_mask_t slot_mask;  // I2S_STD_SLOT_RIGHT 或 I2S_STD_SLOT_LEFT
+        i2s_std_slot_mask_t slot_mask;  // I2S_STD_SLOT_RIGHT 或 LEFT
+        gpio_num_t gpio_mclk;
+        gpio_num_t gpio_bclk;
+        gpio_num_t gpio_ws;
+        gpio_num_t gpio_dout;
+        gpio_num_t gpio_din;
+        bool invert_mclk;
+        bool invert_bclk;
+        bool invert_ws;
+    } i2s_service_rx_cfg_t;
 
-        uint32_t frame_ms; // 每帧时长，默认 20ms
-        int shift_bits;    // 把32位容器右移到int16，有些器件用14/16等
-        int print_head;    // 每帧打印前多少个样本，0表示不打印
-    } i2s_service_cfg_t;
+    typedef struct
+    {
+        i2s_chan_handle_t rx;
+    } i2s_service_handle_t;
 
-    /** 初始化并开启 I²S 采集 */
-    esp_err_t i2s_service_start(const i2s_service_cfg_t *cfg);
+    esp_err_t i2s_service_rx_create(const i2s_service_rx_cfg_t *cfg, i2s_service_handle_t *out);
+    void i2s_service_destroy(i2s_service_handle_t *h);
 
-    /** 停止采集并释放资源 */
-    void i2s_service_stop(void);
+    /* 阻塞读取 bytes（timeout_ms<0 表示永久阻塞） */
+    esp_err_t i2s_service_read_bytes(i2s_service_handle_t *h, void *buf, size_t bytes,
+                                     size_t *out_bytes, int timeout_ms);
 
-    /**
-     * @brief VAD状态变化回调函数类型
-     */
-    typedef void (*vad_state_callback_t)(bool vad_active);
-
-    /**
-     * @brief 设置VAD状态变化回调函数
-     */
-    void i2s_service_set_vad_callback(vad_state_callback_t callback);
-
-    /**
-     * @brief 启用或禁用VAD功能
-     */
-    void i2s_service_enable_vad(bool enable);
-
-    /**
-     * @brief 获取当前VAD状态
-     */
-    bool i2s_service_is_vad_active(void);
+    /* 读取 samples 个样本并转成 PCM16（src_bits=16 直拷贝；=32 右移 shift_bits） */
+    esp_err_t i2s_service_read_pcm16(i2s_service_handle_t *h,
+                                     int16_t *dst_pcm16, size_t samples,
+                                     i2s_data_bit_width_t src_bits, int shift_bits,
+                                     int timeout_ms);
 
 #ifdef __cplusplus
 }

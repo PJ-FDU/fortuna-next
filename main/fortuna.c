@@ -6,6 +6,7 @@
 
 // 硬件服务
 #include "i2c_service.h"
+#include "mic_service.h"
 #include "io_expander_service.h"
 #include "lcd_service.h"
 
@@ -23,6 +24,7 @@
 #include "esp_psram.h"
 #include "esp_spiffs.h"
 #include "dirent.h"
+#include "driver/gpio.h"
 
 #include "lvgl.h" // LVGL主头文件
 
@@ -30,6 +32,19 @@
 
 #define WIFI_SSID "ziroom_3501A" // Wi-Fi 名称
 #define WIFI_PASS "4001001111"   // Wi-Fi 密码
+
+static void on_audio_after_wakeup(const int16_t *pcm, size_t samples)
+{
+    ESP_LOGI(TAG, "on_audio_after_wakeup");
+    static uint32_t idx = 0;
+    if ((++idx % 10) != 0)
+        return; // 每 ~320ms 打印一次
+    int n = samples < 10 ? samples : 10;
+    printf("[PCM] %u:", samples);
+    for (int i = 0; i < n; ++i)
+        printf(" %d", pcm[i]);
+    printf("\n");
+}
 
 // VAD状态变化回调函数
 // static void on_vad_state_changed(bool vad_active)
@@ -96,6 +111,27 @@ void app_main(void)
 
     // ESP_LOGI(TAG, "=== System initialization completed ===");
     // ESP_LOGI(TAG, "System is running, waiting for events...");
+
+    mic_service_cfg_t mic = {
+        .rx_port = I2S_NUM_1,
+        .gpio_bclk = GPIO_NUM_15, // MIC_SCK
+        .gpio_ws = GPIO_NUM_2,    // MIC_WS (LRCK)
+        .gpio_din = GPIO_NUM_39,  // MIC_SD
+        .gpio_mclk = I2S_GPIO_UNUSED,
+
+        .sample_rate = 16000,
+        .data_bits = I2S_DATA_BIT_WIDTH_32BIT, // 推荐
+        .slot_mode = I2S_SLOT_MODE_MONO,
+        .slot_mask = I2S_STD_SLOT_RIGHT, // 如无声再试 LEFT
+        .frame_ms = 20,
+        .shift_bits = 14, // 32→16 右移
+        .print_head = 0,
+
+        .awake_silence_back_ms = 800,
+    };
+
+    mic_service_set_callback(on_audio_after_wakeup);
+    ESP_ERROR_CHECK(mic_service_start(&mic));
 
     // 主循环 - 系统空闲
     while (1)
