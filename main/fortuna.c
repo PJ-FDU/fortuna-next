@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_check.h"
 
@@ -25,11 +26,10 @@
 
 #include "lvgl.h" // LVGL主头文件
 
-static const char *TAG = "FORTUNA";
+#define TAG "fortuna"
 
 #define WIFI_SSID "ziroom_3501A" // Wi-Fi 名称
 #define WIFI_PASS "4001001111"   // Wi-Fi 密码
-
 
 // VAD状态变化回调函数
 // static void on_vad_state_changed(bool vad_active)
@@ -67,6 +67,7 @@ void app_main(void)
 
     // 1. 初始化硬件服务
     ESP_LOGI(TAG, "Initializing hardware services...");
+    ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
     ESP_ERROR_CHECK(esp_i2c_service_init());
     ESP_ERROR_CHECK(esp_io_expander_service_init());
     ESP_ERROR_CHECK(lcd_service_init());
@@ -82,6 +83,8 @@ void app_main(void)
     ESP_ERROR_CHECK(lcd_service_get_panel_io(&panel_io));
     // ESP_ERROR_CHECK(lcd_touch_service_get_handle(&touch));
     ESP_ERROR_CHECK(ui_system_init(panel, panel_io, NULL));
+
+    // 启动触摸服务任务
 
     // 3. 初始化音频系统
     // ESP_LOGI(TAG, "Initializing audio system...");

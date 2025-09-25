@@ -10,6 +10,7 @@
 #include "esp_spiffs.h"
 #include "esp_heap_caps.h"
 #include <dirent.h>
+#include "audio_input_mask.h"
 
 #define SCREEN_SIZE 412
 #define RADIUS (SCREEN_SIZE / 2)
@@ -165,6 +166,8 @@ esp_err_t ui_system_init(esp_lcd_panel_handle_t panel,
     // create_img_bg();
 
     create_gradient_rect();
+
+    show_audio_input_mask();
 
     lvgl_port_unlock();
 

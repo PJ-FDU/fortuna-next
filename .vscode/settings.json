@@ -45,6 +45,7 @@
     "esp_vad.h": "c",
     "esp_io_expander.h": "c",
     "spi_master.h": "c",
-    "esp_lcd_spd2010.h": "c"
+    "esp_lcd_spd2010.h": "c",
+    "audio_input_mask.h": "c"
   }
 }

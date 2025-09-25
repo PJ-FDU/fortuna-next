@@ -13,6 +13,8 @@ set(SRCS
     # UI组件
     "ui/voice_overlay.c"
 
+    "screen/audio_input_mask.c"
+
     # Service层源文件
     "service/i2c_service.c"
     "service/i2s_service.c"
@@ -41,6 +43,7 @@ set(SRCS
 set(INCLUDE_DIRS
     "."
     "font"
+    "screen"
     "service"
     # "data"
     # "lvgl_screens"
