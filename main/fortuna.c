@@ -11,7 +11,7 @@
 #include "lcd_service.h"
 
 // 高级服务
-// #include "wifi_service.h"
+#include "wifi_service.h"
 #include "ui_system_service.h"
 // #include "audio_system_service.h"
 // #include "ui/voice_overlay.h"
@@ -100,7 +100,7 @@ void app_main(void)
 
     // ESP_LOGI(TAG, "=== System initialization completed ===");
     // ESP_LOGI(TAG, "System is running, waiting for events...");
-
+    ESP_ERROR_CHECK(wifi_service_init(WIFI_SSID, WIFI_PASS, NULL));
     ESP_ERROR_CHECK(mic_service_init());
 
     // 主循环 - 系统空闲

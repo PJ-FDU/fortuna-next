@@ -244,12 +244,12 @@ static void mic_task(void *arg)
         int fps = (s_cfg.sample_rate + feed_chunk / 2) / feed_chunk;
         if (fps <= 0)
             fps = 32;
-        if (frames % fps == 0)
-        {
-            float rms = sqrtf((float)sumsq / (float)feed_chunk);
-            float peak_db = 20.0f * log10f((peak > 0 ? peak : 1) / 32768.0f);
-            ESP_LOGI(TAG, "MIC level: peak=%d (%.1f dBFS), rms=%.1f", peak, peak_db, rms);
-        }
+        // if (frames % fps == 0)
+        // {
+        //     float rms = sqrtf((float)sumsq / (float)feed_chunk);
+        //     float peak_db = 20.0f * log10f((peak > 0 ? peak : 1) / 32768.0f);
+        //     ESP_LOGI(TAG, "MIC level: peak=%d (%.1f dBFS), rms=%.1f", peak, peak_db, rms);
+        // }
 
         /* 3) 喂入 AFE（单通道 M：直接喂 mic_frame） */
         s_afe_if->feed(s_afe, mic_frame);
