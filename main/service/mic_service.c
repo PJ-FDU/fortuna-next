@@ -98,6 +98,44 @@ void mic_service_set_callback(mic_on_audio_cb_t cb) { s_cb = cb; }
 bool mic_service_is_awake(void) { return s_state == ST_AWAKE; }
 void mic_service_sleep(void) { set_sleep(); }
 
+/* 默认的唤醒后回调：打印前几个 PCM 值（从 fortuna.c 移动过来） */
+static void on_audio_after_wakeup(const int16_t *pcm, size_t samples)
+{
+    static uint32_t idx = 0;
+    if ((++idx % 10) != 0)
+        return; // 每 ~320ms 打印一次
+    int n = samples < 10 ? samples : 10;
+    printf("[PCM] %u:", samples);
+    for (int i = 0; i < n; ++i)
+        printf(" %d", pcm[i]);
+    printf("\n");
+}
+
+/* 简化初始化：内部使用默认 mic 配置并启动服务（供 app_main 调用） */
+esp_err_t mic_service_init(void)
+{
+    mic_service_cfg_t mic = {
+        .rx_port = I2S_NUM_1,
+        .gpio_bclk = GPIO_NUM_15, // MIC_SCK
+        .gpio_ws = GPIO_NUM_2,    // MIC_WS (LRCK)
+        .gpio_din = GPIO_NUM_39,  // MIC_SD
+        .gpio_mclk = I2S_GPIO_UNUSED,
+
+        .sample_rate = 16000,
+        .data_bits = I2S_DATA_BIT_WIDTH_32BIT, // 推荐
+        .slot_mode = I2S_SLOT_MODE_MONO,
+        .slot_mask = I2S_STD_SLOT_RIGHT, // 如无声再试 LEFT
+        .frame_ms = 20,
+        .shift_bits = 14, // 32→16 右移
+        .print_head = 0,
+
+        .awake_silence_back_ms = 800,
+    };
+
+    mic_service_set_callback(on_audio_after_wakeup);
+    return mic_service_start(&mic);
+}
+
 /* === AFE v2 初始化：input_format="M"（单通道，仅麦克风） === */
 static esp_err_t afe_v2_init(void)
 {

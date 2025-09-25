@@ -38,6 +38,9 @@ extern "C"
     esp_err_t mic_service_start(const mic_service_cfg_t *cfg);
     void mic_service_stop(void);
 
+    /* 简化初始化：内部使用默认配置并启动 MIC 服务 */
+    esp_err_t mic_service_init(void);
+
     void mic_service_set_callback(mic_on_audio_cb_t cb);
     bool mic_service_is_awake(void);
     void mic_service_sleep(void);
