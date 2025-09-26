@@ -10,6 +10,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "esp_http_client.h"
 
 static const char *TAG = "wifi_service";
 
@@ -63,6 +64,7 @@ static void strncpy_safe(char *dst, const char *src, size_t len)
 /* 工作队列：把重工作放到独立任务处理，避免阻塞系统事件任务 */
 typedef enum {
     WIFI_WORK_SCAN_DONE = 1,
+    WIFI_WORK_HEALTH_CHECK = 2,
 } wifi_work_t;
 
 static QueueHandle_t s_wifi_work_queue = NULL;
@@ -119,6 +121,27 @@ static void wifi_worker_task(void *arg)
                 } else {
                     schedule_scan_with_backoff(true);
                 }
+            } else if (work == WIFI_WORK_HEALTH_CHECK) {
+                ESP_LOGI(TAG, "worker: performing health check to http://192.168.1.102:8080/health");
+                esp_http_client_config_t http_cfg = {
+                    .url = "http://192.168.1.102:8080/health",
+                    .method = HTTP_METHOD_GET,
+                    .timeout_ms = 3000,
+                };
+                esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
+                if (!client) {
+                    ESP_LOGE(TAG, "health_check: http_client_init failed");
+                    continue;
+                }
+                esp_err_t err = esp_http_client_perform(client);
+                if (err == ESP_OK) {
+                    int status = esp_http_client_get_status_code(client);
+                    int len = esp_http_client_get_content_length(client);
+                    ESP_LOGI(TAG, "health_check: status=%d, len=%d", status, len);
+                } else {
+                    ESP_LOGW(TAG, "health_check: request failed: %s", esp_err_to_name(err));
+                }
+                esp_http_client_cleanup(client);
             }
         }
     }
@@ -126,6 +149,7 @@ static void wifi_worker_task(void *arg)
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
+    static int64_t s_last_scan_event_ts = 0;
     if (event_base == WIFI_EVENT)
     {
         switch (event_id)
@@ -136,15 +160,24 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             esp_wifi_scan_start(NULL, false);
             break;
         case WIFI_EVENT_SCAN_DONE:
-            ESP_LOGI(TAG, "Wi-Fi scan finished. posting work to worker task");
-            if (s_wifi_work_queue) {
-                wifi_work_t w = WIFI_WORK_SCAN_DONE;
-                if (xQueueSend(s_wifi_work_queue, &w, 0) != pdTRUE) {
-                    ESP_LOGW(TAG, "work queue full, dropping scan_done event");
+            {
+                int64_t now = esp_timer_get_time();
+                /* 丢弃过于频繁的 scan_done 事件（阈值 1500ms） */
+                if (now - s_last_scan_event_ts < 1500 * 1000) {
+                    ESP_LOGD(TAG, "scan_done event throttled (%.0f ms since last)", (now - s_last_scan_event_ts) / 1000.0);
+                    break;
                 }
-            } else {
-                /* fallback: if no queue, do immediate short processing (minimal) */
-                schedule_scan_with_backoff(false);
+                s_last_scan_event_ts = now;
+                ESP_LOGI(TAG, "Wi-Fi scan finished. posting work to worker task");
+                if (s_wifi_work_queue) {
+                    wifi_work_t w = WIFI_WORK_SCAN_DONE;
+                    if (xQueueSend(s_wifi_work_queue, &w, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "work queue full, dropping scan_done event");
+                    }
+                } else {
+                    /* fallback: if no queue, do immediate short processing (minimal) */
+                    schedule_scan_with_backoff(false);
+                }
             }
             break;
 
@@ -169,6 +202,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_connected = true;
         ESP_LOGI(TAG, "wifi status: CONNECTED");
+        /* enqueue a health check to be executed by worker task */
+        if (s_wifi_work_queue) {
+            wifi_work_t w = WIFI_WORK_HEALTH_CHECK;
+            if (xQueueSend(s_wifi_work_queue, &w, 0) != pdTRUE) {
+                ESP_LOGW(TAG, "work queue full, cannot enqueue health check");
+            }
+        }
     }
 }
 

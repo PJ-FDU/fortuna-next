@@ -6,6 +6,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
+#include "esp_websocket_client.h"
 #include "esp_heap_caps.h"
 #include <math.h>
 
@@ -92,11 +94,235 @@ static inline void set_sleep(void)
     s_state = ST_SLEEP;
     if (s_afe_if && s_afe)
         s_afe_if->reset_buffer(s_afe);
+    /* 当进入 sleep 时统一关闭 websocket 并记录结束 */
+    printf("audio rec ended\n");
+    /* stop websocket if running */
+    extern void mic_ws_stop(void);
+    mic_ws_stop();
 }
 
 void mic_service_set_callback(mic_on_audio_cb_t cb) { s_cb = cb; }
 bool mic_service_is_awake(void) { return s_state == ST_AWAKE; }
 void mic_service_sleep(void) { set_sleep(); }
+
+/* ===== WebSocket audio streaming support ===== */
+#define MIC_WS_URI "ws://192.168.1.102:8080/audio"
+#define MIC_SEND_QUEUE_LEN 32
+#define MIC_WS_TX_TIMEOUT_MS 5000
+#define MIC_TX_TASK_STACK_SIZE (4 * 1024)
+#define MIC_SEND_DELAY_MS 10
+
+typedef struct {
+    size_t nbytes;
+    uint8_t data[1024];
+} mic_frame_t;
+
+static esp_websocket_client_handle_t s_ws = NULL;
+static TaskHandle_t s_tx_task = NULL;
+static QueueHandle_t s_tx_queue = NULL; /* queue of mic_frame_t* pointers */
+static volatile bool s_ws_connected = false;
+static volatile bool s_ws_running = false;
+
+static void mic_ws_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    esp_websocket_event_data_t *e = (esp_websocket_event_data_t *)event_data;
+    switch (event_id) {
+    case WEBSOCKET_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "WebSocket Connected");
+        s_ws_connected = true;
+        break;
+    case WEBSOCKET_EVENT_DISCONNECTED:
+        ESP_LOGW(TAG, "WebSocket Disconnected");
+        s_ws_connected = false;
+        break;
+    case WEBSOCKET_EVENT_ERROR:
+        {
+            ESP_LOGE(TAG, "WebSocket ERROR event");
+            /* 详细打印错误结构中的信息，便于排查 TLS/handshake/socket 错误 */
+            esp_websocket_event_data_t *edata = (esp_websocket_event_data_t *)event_data;
+            esp_websocket_error_codes_t *errc = &edata->error_handle;
+            ESP_LOGE(TAG, "ws_error: esp_tls_last_esp_err=%s, esp_tls_stack_err=%d, cert_verify_flags=%d",
+                     esp_err_to_name(errc->esp_tls_last_esp_err), errc->esp_tls_stack_err, errc->esp_tls_cert_verify_flags);
+            ESP_LOGE(TAG, "ws_error: error_type=%d, handshake_status=%d, transport_sock_errno=%d",
+                     errc->error_type, errc->esp_ws_handshake_status_code, errc->esp_transport_sock_errno);
+        }
+        break;
+    case WEBSOCKET_EVENT_DATA:
+        if (e->data_len > 0) {
+            /* 区分文本/二进制并打印：文本直接打印，二进制打印前 64 字节的 hex */
+            if (e->op_code == 0x01) { /* text */
+                char *response = malloc(e->data_len + 1);
+                if (response) {
+                    memcpy(response, e->data_ptr, e->data_len);
+                    response[e->data_len] = '\0';
+                    ESP_LOGI(TAG, "WS Server: %s", response);
+                    free(response);
+                }
+            } else if (e->op_code == 0x02) { /* binary */
+                ESP_LOGI(TAG, "WS Server (binary): %d bytes", e->data_len);
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, e->data_ptr, e->data_len > 64 ? 64 : e->data_len, ESP_LOG_INFO);
+            } else {
+                ESP_LOGI(TAG, "WS Server (op 0x%02x): %d bytes", e->op_code, e->data_len);
+            }
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void mic_tx_task(void *arg)
+{
+    mic_frame_t *framep = NULL;
+    while (s_ws_running) {
+        if (xQueueReceive(s_tx_queue, &framep, pdMS_TO_TICKS(100)) == pdTRUE) {
+            if (!framep) continue;
+            UBaseType_t qlen = uxQueueMessagesWaiting(s_tx_queue);
+            ESP_LOGI(TAG, "mic_tx_task: dequeued frame %zu bytes, queue_len=%u", framep->nbytes, (unsigned)qlen);
+            if (!s_ws_connected || !s_ws) {
+                ESP_LOGW(TAG, "WS not connected, dropping frame (%zu bytes)", framep->nbytes);
+                heap_caps_free(framep);
+                continue;
+            }
+            int ret = esp_websocket_client_send_bin(s_ws, (const char *)framep->data, framep->nbytes, pdMS_TO_TICKS(MIC_WS_TX_TIMEOUT_MS));
+            if (ret < 0) {
+                ESP_LOGW(TAG, "ws send failed: %d", ret);
+                vTaskDelay(pdMS_TO_TICKS(100));
+            } else {
+                ESP_LOGI(TAG, "ws sent frame %zu bytes", framep->nbytes);
+            }
+            heap_caps_free(framep);
+            vTaskDelay(pdMS_TO_TICKS(MIC_SEND_DELAY_MS));
+        }
+    }
+    vTaskDelete(NULL);
+}
+
+esp_err_t mic_ws_start(void)
+{
+    if (s_ws_running) return ESP_OK;
+    ESP_LOGI(TAG, "mic_ws_start: creating tx queue (len=%d, item=%zu)", MIC_SEND_QUEUE_LEN, sizeof(mic_frame_t *));
+    s_tx_queue = xQueueCreate(MIC_SEND_QUEUE_LEN, sizeof(mic_frame_t *));
+    if (!s_tx_queue) {
+        ESP_LOGE(TAG, "mic_ws_start: xQueueCreate failed - free heap=%u, min_free=%u", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
+        return ESP_ERR_NO_MEM;
+    }
+
+    /* 配置 WebSocket（参考 mic_service copy.c 的增强配置） */
+    esp_websocket_client_config_t cfg = {
+        .uri = MIC_WS_URI,
+        .reconnect_timeout_ms = 5000,
+        .network_timeout_ms = 10000,
+        .buffer_size = 8192,
+        .task_stack = MIC_TX_TASK_STACK_SIZE,
+        .task_prio = 5,
+        .ping_interval_sec = 10,
+        .disable_auto_reconnect = false,
+    };
+    ESP_LOGI(TAG, "mic_ws_start: websocket cfg: uri=%s, reconnect_timeout=%dms, network_timeout=%dms, buffer_size=%d, task_stack=%d, task_prio=%d, ping_interval=%d, disable_auto_reconnect=%d",
+             cfg.uri, cfg.reconnect_timeout_ms, cfg.network_timeout_ms, (int)cfg.buffer_size, cfg.task_stack, cfg.task_prio, (int)cfg.ping_interval_sec, cfg.disable_auto_reconnect);
+    ESP_LOGI(TAG, "mic_ws_start: calling esp_websocket_client_init()");
+    s_ws = esp_websocket_client_init(&cfg);
+    if (!s_ws) {
+        ESP_LOGE(TAG, "mic_ws_start: esp_websocket_client_init returned NULL for uri=%s", MIC_WS_URI);
+        vQueueDelete(s_tx_queue);
+        s_tx_queue = NULL;
+        return ESP_ERR_INVALID_STATE;
+    }
+    ESP_LOGI(TAG, "mic_ws_start: esp_websocket_client_init OK (handle=%p)", s_ws);
+
+    ESP_LOGI(TAG, "mic_ws_start: registering websocket events");
+    esp_err_t err = esp_websocket_register_events(s_ws, WEBSOCKET_EVENT_ANY, mic_ws_event_handler, NULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mic_ws_start: esp_websocket_register_events failed: %s", esp_err_to_name(err));
+        esp_websocket_client_destroy(s_ws);
+        s_ws = NULL;
+        vQueueDelete(s_tx_queue);
+        s_tx_queue = NULL;
+        return err;
+    }
+    ESP_LOGI(TAG, "mic_ws_start: register events OK");
+
+    ESP_LOGI(TAG, "mic_ws_start: starting websocket client");
+    err = esp_websocket_client_start(s_ws);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "mic_ws_start: esp_websocket_client_start failed: %s", esp_err_to_name(err));
+        /* cleanup */
+        esp_websocket_client_destroy(s_ws);
+        s_ws = NULL;
+        vQueueDelete(s_tx_queue);
+        s_tx_queue = NULL;
+        return err;
+    }
+    ESP_LOGI(TAG, "mic_ws_start: esp_websocket_client_start returned OK");
+
+    /* only mark running after start succeeded */
+    s_ws_running = true;
+    ESP_LOGI(TAG, "mic_ws_start: creating TX task (stack=%d, prio=%d)", MIC_TX_TASK_STACK_SIZE, 5);
+    BaseType_t ok = xTaskCreatePinnedToCore(mic_tx_task, "mic_ws_tx", MIC_TX_TASK_STACK_SIZE, NULL, 5, &s_tx_task, 1);
+    if (ok != pdPASS) {
+        ESP_LOGE(TAG, "mic_ws_start: create mic_ws_tx task failed");
+        /* stop websocket and clean up */
+        esp_websocket_client_stop(s_ws);
+        esp_websocket_client_destroy(s_ws);
+        s_ws = NULL;
+        vQueueDelete(s_tx_queue);
+        s_tx_queue = NULL;
+        s_ws_running = false;
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "mic_ws_start: TX task created (handle=%p). websocket fully initialized for uri=%s", s_tx_task, MIC_WS_URI);
+    return ESP_OK;
+}
+
+void mic_ws_stop(void)
+{
+    if (!s_ws_running) return;
+    s_ws_running = false;
+    if (s_ws) {
+        esp_websocket_client_stop(s_ws);
+        esp_websocket_client_destroy(s_ws);
+        s_ws = NULL;
+    }
+    if (s_tx_task) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelete(s_tx_task);
+        s_tx_task = NULL;
+    }
+    if (s_tx_queue) {
+        /* drain and free any outstanding frames */
+        mic_frame_t *pending = NULL;
+        while (xQueueReceive(s_tx_queue, &pending, 0) == pdTRUE) {
+            if (pending) heap_caps_free(pending);
+        }
+        vQueueDelete(s_tx_queue);
+        s_tx_queue = NULL;
+    }
+    s_ws_connected = false;
+}
+
+esp_err_t mic_service_send_pcm16(const int16_t *pcm, size_t nsamples)
+{
+    if (!s_ws_running || !s_tx_queue) return ESP_ERR_INVALID_STATE;
+    if (!s_ws_connected) return ESP_ERR_INVALID_STATE;
+    size_t need = nsamples * sizeof(int16_t);
+    if (need > sizeof(((mic_frame_t *)0)->data)) return ESP_ERR_INVALID_SIZE;
+
+    mic_frame_t *framep = heap_caps_malloc(sizeof(mic_frame_t), MALLOC_CAP_8BIT);
+    if (!framep) {
+        ESP_LOGE(TAG, "mic_service_send_pcm16: heap_caps_malloc failed, free heap=%u", esp_get_free_heap_size());
+        return ESP_ERR_NO_MEM;
+    }
+    framep->nbytes = need;
+    memcpy(framep->data, pcm, need);
+    if (xQueueSend(s_tx_queue, &framep, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "mic_service_send_pcm16: queue full/drop (%zu bytes)", framep->nbytes);
+        heap_caps_free(framep);
+        return ESP_ERR_TIMEOUT;
+    }
+    return ESP_OK;
+}
 
 /* 默认的唤醒后回调：打印前几个 PCM 值（从 fortuna.c 移动过来） */
 static void on_audio_after_wakeup(const int16_t *pcm, size_t samples)
@@ -105,10 +331,19 @@ static void on_audio_after_wakeup(const int16_t *pcm, size_t samples)
     if ((++idx % 10) != 0)
         return; // 每 ~320ms 打印一次
     int n = samples < 10 ? samples : 10;
+    /* 尝试将 PCM 数据发送到 websocket（非阻塞），并保留原先的打印以便调试 */
     printf("[PCM] %u:", samples);
     for (int i = 0; i < n; ++i)
         printf(" %d", pcm[i]);
     printf("\n");
+
+    /* 转发到 mic_service_send_pcm16；忽略错误但打印日志便于排查 */
+    esp_err_t r = mic_service_send_pcm16(pcm, samples);
+    if (r == ESP_OK) {
+        ESP_LOGI(TAG, "on_audio_after_wakeup: queued %u samples to ws", (unsigned)samples);
+    } else {
+        ESP_LOGW(TAG, "on_audio_after_wakeup: mic_service_send_pcm16 failed: %s", esp_err_to_name(r));
+    }
 }
 
 /* 简化初始化：内部使用默认 mic 配置并启动服务（供 app_main 调用） */
@@ -273,6 +508,12 @@ static void mic_task(void *arg)
                 ESP_LOGI(TAG, "wake up success");
                 s_state = ST_AWAKE;
                 s_last_voice_ts = esp_timer_get_time();
+                /* start websocket streaming */
+                if (mic_ws_start() != ESP_OK) {
+                    ESP_LOGW(TAG, "mic_ws_start failed");
+                } else {
+                    ESP_LOGI(TAG, "mic_ws_start success");
+                }
             }
         }
 

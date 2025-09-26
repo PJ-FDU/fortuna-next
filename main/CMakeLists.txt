@@ -54,7 +54,7 @@ set(INCLUDE_DIRS
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES driver esp_psram esp_timer esp_wifi freertos nvs_flash spiffs fatfs wear_levelling
+    REQUIRES driver esp_psram esp_timer esp_wifi freertos nvs_flash spiffs fatfs wear_levelling esp_http_client
     PRIV_REQUIRES
 )
 
