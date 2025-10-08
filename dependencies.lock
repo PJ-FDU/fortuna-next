@@ -193,6 +193,6 @@ direct_dependencies:
 - idf
 - waveshare/pcf85063a
 - waveshare/qmi8658
-manifest_hash: c557e33fdf88e1a080a4c996ba6127a8297c6a2c2ce6e3a1d29d300f3108e1b4
+manifest_hash: 5db0eaef4fe4915a7f05bb1ec62b556123a45e359a670201c73f25aa2d4d8b9e
 target: esp32s3
 version: 2.0.0
