@@ -231,8 +231,25 @@ static esp_err_t reset(esp_lcd_touch_handle_t tp)
     return ESP_OK;
 }
 
-#define i2c_write(data_p, len)      ESP_RETURN_ON_ERROR(esp_lcd_panel_io_tx_param(tp->io, 0, data_p, len), TAG, "Tx failed");
-#define i2c_read(data_p, len)       ESP_RETURN_ON_ERROR(esp_lcd_panel_io_rx_param(tp->io, 0, data_p, len), TAG, "Rx failed");
+// 重新实现i2c_write和i2c_read
+static esp_err_t spd2010_i2c_write(esp_lcd_touch_handle_t tp, const uint8_t *buffer, size_t length)
+{
+    ESP_RETURN_ON_FALSE(buffer && length >= 2, ESP_ERR_INVALID_ARG, TAG, "invalid write buffer");
+    uint16_t reg = ((uint16_t)buffer[0] << 8) | buffer[1];
+    const uint8_t *payload = (length > 2) ? &buffer[2] : NULL;
+    size_t payload_len = (length > 2) ? (length - 2) : 0;
+    return esp_lcd_panel_io_tx_param(tp->io, reg, payload, payload_len);
+}
+
+static esp_err_t spd2010_i2c_read(esp_lcd_touch_handle_t tp, uint8_t *buffer, size_t length)
+{
+    ESP_RETURN_ON_FALSE(buffer && length > 0, ESP_ERR_INVALID_ARG, TAG, "invalid read buffer");
+    uint16_t reg = ((uint16_t)buffer[0] << 8) | buffer[1];
+    return esp_lcd_panel_io_rx_param(tp->io, reg, buffer, length);
+}
+
+#define i2c_write(data_p, len)      ESP_RETURN_ON_ERROR(spd2010_i2c_write(tp, data_p, len), TAG, "Tx failed");
+#define i2c_read(data_p, len)       ESP_RETURN_ON_ERROR(spd2010_i2c_read(tp, data_p, len), TAG, "Rx failed");
 
 static esp_err_t write_tp_point_mode_cmd(esp_lcd_touch_handle_t tp)
 {

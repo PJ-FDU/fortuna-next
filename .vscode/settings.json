@@ -60,12 +60,14 @@
     "wifi_service.h": "c",
     "mic_service.h": "c",
     "lv_examples.h": "c",
-    "lv_example_get_started.h": "c"
+    "lv_example_get_started.h": "c",
+    "lvgl_driver.h": "c"
   },
   "cSpell.words": [
     "disp",
     "espressif",
     "EXIO",
+    "fatfs",
     "hpoint",
     "hres",
     "inited",
@@ -74,10 +76,12 @@
     "LOGW",
     "lvgl",
     "pclk",
+    "psram",
     "qspi",
     "sclk",
     "SPICOMMON",
     "spiram",
+    "SRCS",
     "waveshare"
   ],
   "idf.espIdfPath": "/Users/panjian/esp/v5.5.1/esp-idf",

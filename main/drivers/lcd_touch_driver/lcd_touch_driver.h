@@ -7,7 +7,8 @@
 #include "esp_lcd_touch.h"
 
 #define LCD_TOUCH_I2C_CLK_HZ (100000)
-#define LCD_TOUCH_INT_GPIO (GPIO_NUM_4)
+// #define LCD_TOUCH_INT_GPIO (GPIO_NUM_4)
+#define LCD_TOUCH_INT_GPIO (GPIO_NUM_NC)
 #define LCD_TOUCH_RST_EXIO (IO_EXPANDER_PIN_NUM_0)
 
 #ifdef __cplusplus

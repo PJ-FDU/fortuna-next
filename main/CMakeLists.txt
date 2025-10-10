@@ -22,12 +22,24 @@ set(INCLUDE_DIRS
     "drivers/lvgl_driver"
 )
 
+set(REQUIRES
+    driver
+    esp_psram
+    esp_timer
+    esp_wifi
+    freertos
+    nvs_flash
+    spiffs
+    fatfs
+    wear_levelling
+    esp_http_client
+)
+
 # 注册组件
 idf_component_register(
     SRCS ${SRCS}
     INCLUDE_DIRS ${INCLUDE_DIRS}
-    REQUIRES driver esp_psram esp_timer esp_wifi freertos nvs_flash spiffs fatfs wear_levelling esp_http_client
-    PRIV_REQUIRES
+    REQUIRES ${REQUIRES}
 )
 
 # SPIFFS 数据上传配置
@@ -39,6 +51,7 @@ idf_component_get_property(LVGL_LIB lvgl__lvgl COMPONENT_LIB)
 # 告诉 LVGL 去哪里找 lv_conf.h
 target_compile_definitions(${LVGL_LIB} PUBLIC LV_CONF_PATH=\"${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h\")
 target_include_directories(${LVGL_LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_sources(${LVGL_LIB} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/lvgl_mem_psram.c)
 
 # Suppress -Werror=char-subscripts for the lvgl component so warnings from
 # third-party sources don't fail the whole build. This avoids modifying upstream
