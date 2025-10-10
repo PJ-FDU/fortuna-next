@@ -16,6 +16,8 @@ extern "C" {
 
     esp_err_t i2c_driver_init(void);
 
+    esp_err_t i2c_driver_get_bus_handle(i2c_master_bus_handle_t *handle);
+
 #ifdef __cplusplus
 }
 #endif

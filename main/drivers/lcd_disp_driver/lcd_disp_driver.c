@@ -18,11 +18,26 @@ static esp_lcd_panel_io_handle_t s_lcd_panel_io_handle = NULL;
 
 static SemaphoreHandle_t s_backlight_mutex = NULL;
 
+static void lcd_disp_driver_deinit_backlight(void)
+{
+    if (s_backlight_mutex != NULL)
+    {
+        vSemaphoreDelete(s_backlight_mutex);
+        s_backlight_mutex = NULL;
+        ledc_stop(LCD_BL_PWM_MODE, LCD_BL_PWM_CHANNEL, 0);
+    }
+}
+
 static esp_err_t lcd_disp_driver_init_backlight(void)
 {
     ESP_LOGI(TAG, "Init LCD backlight (PWM on GPIO%d)", LCD_BL_PWM_GPIO);
 
-    ESP_ERROR_CHECK(gpio_set_direction(LCD_BL_PWM_GPIO, GPIO_MODE_OUTPUT));
+    esp_err_t err = gpio_set_direction(LCD_BL_PWM_GPIO, GPIO_MODE_OUTPUT);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "gpio_set_direction failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     ledc_timer_config_t timer_config = {
         .speed_mode = LCD_BL_PWM_MODE,
@@ -31,7 +46,12 @@ static esp_err_t lcd_disp_driver_init_backlight(void)
         .freq_hz = LCD_BL_PWM_FREQ_HZ,
         .clk_cfg = LEDC_AUTO_CLK,
     };
-    ESP_ERROR_CHECK(ledc_timer_config(&timer_config));
+    err = ledc_timer_config(&timer_config);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "ledc_timer_config failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     ledc_channel_config_t channel_config = {
         .gpio_num = LCD_BL_PWM_GPIO,
@@ -42,7 +62,12 @@ static esp_err_t lcd_disp_driver_init_backlight(void)
         .duty = 0,
         .hpoint = 0,
     };
-    ESP_ERROR_CHECK(ledc_channel_config(&channel_config));
+    err = ledc_channel_config(&channel_config);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "ledc_channel_config failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
     s_backlight_mutex = xSemaphoreCreateMutex();
     if (s_backlight_mutex == NULL)
@@ -72,15 +97,49 @@ static esp_err_t lcd_disp_driver_init_rst_exio(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_ERROR_CHECK(esp_io_expander_set_dir(esp_io_expander_handle, LCD_RST_EXIO, IO_EXPANDER_OUTPUT));
+    err = esp_io_expander_set_dir(esp_io_expander_handle, LCD_RST_EXIO, IO_EXPANDER_OUTPUT);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to set expander dir: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    ESP_ERROR_CHECK(esp_io_expander_set_level(esp_io_expander_handle, LCD_RST_EXIO, 0));
+    err = esp_io_expander_set_level(esp_io_expander_handle, LCD_RST_EXIO, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to pull reset low: %s", esp_err_to_name(err));
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
-    ESP_ERROR_CHECK(esp_io_expander_set_level(esp_io_expander_handle, LCD_RST_EXIO, 1));
+    err = esp_io_expander_set_level(esp_io_expander_handle, LCD_RST_EXIO, 1);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to release reset: %s", esp_err_to_name(err));
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
 
     ESP_LOGI(TAG, "LCD RST (IO Expander pin %d) inited", LCD_RST_EXIO);
     return ESP_OK;
+}
+
+static void lcd_disp_driver_cleanup(esp_lcd_panel_handle_t panel_handle,
+                                    esp_lcd_panel_io_handle_t io_handle,
+                                    bool release_bus)
+{
+    if (panel_handle != NULL)
+    {
+        esp_lcd_panel_del(panel_handle);
+    }
+    if (io_handle != NULL)
+    {
+        esp_lcd_panel_io_del(io_handle);
+    }
+    lcd_disp_driver_deinit_backlight();
+    if (release_bus)
+    {
+        spi_bus_free(LCD_SPI_HOST);
+    }
 }
 
 esp_err_t lcd_disp_driver_set_backlight(uint8_t percent)
@@ -138,6 +197,7 @@ esp_err_t lcd_disp_driver_init(void)
 
     ESP_LOGI(TAG, "Init LCD");
 
+    esp_err_t err = ESP_OK;
     spi_bus_config_t spi_bus_config = {
         .sclk_io_num = LCD_PIN_GPIO,
         .data0_io_num = LCD_D0_GPIO,
@@ -147,7 +207,12 @@ esp_err_t lcd_disp_driver_init(void)
         .max_transfer_sz = 4096,
         .flags = SPICOMMON_BUSFLAG_MASTER,
     };
-    ESP_ERROR_CHECK(spi_bus_initialize(LCD_SPI_HOST, &spi_bus_config, SPI_DMA_CH_AUTO));
+    err = spi_bus_initialize(LCD_SPI_HOST, &spi_bus_config, SPI_DMA_CH_AUTO);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(err));
+        return err;
+    }
 
     esp_lcd_panel_io_spi_config_t esp_lcd_panel_io_spi_config = {
         .cs_gpio_num = LCD_CS_GPIO,
@@ -159,10 +224,28 @@ esp_err_t lcd_disp_driver_init(void)
         .lcd_param_bits = LCD_SPI_PARAM_BITS,
         .flags = {.quad_mode = 1},
     };
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi(LCD_SPI_HOST, &esp_lcd_panel_io_spi_config, &s_lcd_panel_io_handle));
+    esp_lcd_panel_io_handle_t panel_io_handle = NULL;
+    err = esp_lcd_new_panel_io_spi(LCD_SPI_HOST, &esp_lcd_panel_io_spi_config, &panel_io_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create panel IO: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(NULL, NULL, true);
+        return err;
+    }
 
-    ESP_ERROR_CHECK(lcd_disp_driver_init_backlight());
-    ESP_ERROR_CHECK(lcd_disp_driver_init_rst_exio());
+    err = lcd_disp_driver_init_backlight();
+    if (err != ESP_OK)
+    {
+        lcd_disp_driver_cleanup(NULL, panel_io_handle, true);
+        return err;
+    }
+
+    err = lcd_disp_driver_init_rst_exio();
+    if (err != ESP_OK)
+    {
+        lcd_disp_driver_cleanup(NULL, panel_io_handle, true);
+        return err;
+    }
 
     spd2010_vendor_config_t spd2010_vendor_config = {
         .flags = {
@@ -176,13 +259,64 @@ esp_err_t lcd_disp_driver_init(void)
         .vendor_config = &spd2010_vendor_config,
     };
 
-    ESP_ERROR_CHECK(esp_lcd_new_panel_spd2010(s_lcd_panel_io_handle, &lcd_panel_dev_config, &s_lcd_panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(s_lcd_panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(s_lcd_panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(s_lcd_panel_handle, false));
-    ESP_ERROR_CHECK(esp_lcd_panel_set_gap(s_lcd_panel_handle, 0, 0));
-    ESP_ERROR_CHECK(lcd_disp_driver_set_backlight(LCD_BL_PWM_BRIGHTNESS_DEFAULT));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(s_lcd_panel_handle, true));
+    esp_lcd_panel_handle_t panel_handle = NULL;
+    err = esp_lcd_new_panel_spd2010(panel_io_handle, &lcd_panel_dev_config, &panel_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create panel driver: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(NULL, panel_io_handle, true);
+        return err;
+    }
+
+    err = esp_lcd_panel_reset(panel_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Panel reset failed: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    err = esp_lcd_panel_init(panel_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Panel init failed: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    err = esp_lcd_panel_invert_color(panel_handle, false);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Panel invert color failed: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    err = esp_lcd_panel_set_gap(panel_handle, 0, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Set panel gap failed: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    err = lcd_disp_driver_set_backlight(LCD_BL_PWM_BRIGHTNESS_DEFAULT);
+    if (err != ESP_OK)
+    {
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    err = esp_lcd_panel_disp_on_off(panel_handle, true);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Display on failed: %s", esp_err_to_name(err));
+        lcd_disp_driver_cleanup(panel_handle, panel_io_handle, true);
+        return err;
+    }
+
+    s_lcd_panel_handle = panel_handle;
+    s_lcd_panel_io_handle = panel_io_handle;
 
     ESP_LOGI(TAG, "LCD inited");
     return ESP_OK;

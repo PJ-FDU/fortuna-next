@@ -37,3 +37,18 @@ esp_err_t i2c_driver_init(void)
     ESP_LOGI(TAG, "I2C driver has initialized successfully");
     return ESP_OK;
 }
+
+esp_err_t i2c_driver_get_bus_handle(i2c_master_bus_handle_t *handle)
+{
+    if (handle == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_i2c_bus_handle == NULL)
+    {
+        ESP_LOGE(TAG, "I2C bus not initialized. Please call i2c_driver_init() first.");
+        return ESP_ERR_INVALID_STATE;
+    }
+    *handle = s_i2c_bus_handle;
+    return ESP_OK;
+}

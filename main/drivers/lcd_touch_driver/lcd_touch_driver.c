@@ -8,6 +8,7 @@
 #include "lcd_touch_driver.h"
 #include "lcd_disp_driver.h"
 #include "io_exp_driver.h"
+#include "i2c_driver.h"
 
 static const char *TAG = "lcd_touch_driver";
 
@@ -31,16 +32,44 @@ static esp_err_t lcd_touch_driver_init_rst_exio(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    ESP_ERROR_CHECK(esp_io_expander_set_dir(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, IO_EXPANDER_OUTPUT));
+    err = esp_io_expander_set_dir(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, IO_EXPANDER_OUTPUT);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to set expander dir: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    ESP_ERROR_CHECK(esp_io_expander_set_level(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, 0));
+    err = esp_io_expander_set_level(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, 0);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to pull reset low: %s", esp_err_to_name(err));
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
-    ESP_ERROR_CHECK(esp_io_expander_set_level(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, 1));
+    err = esp_io_expander_set_level(esp_io_expander_handle, LCD_TOUCH_RST_EXIO, 1);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to release reset: %s", esp_err_to_name(err));
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
 
     ESP_LOGI(TAG, "LCD touch RST (IO Expander pin %d) inited", LCD_TOUCH_RST_EXIO);
 
     return ESP_OK;
+}
+
+static void lcd_touch_driver_cleanup(esp_lcd_touch_handle_t touch_handle,
+                                     esp_lcd_panel_io_handle_t io_handle)
+{
+    if (touch_handle != NULL)
+    {
+        esp_lcd_touch_del(touch_handle);
+    }
+    if (io_handle != NULL)
+    {
+        esp_lcd_panel_io_del(io_handle);
+    }
 }
 
 esp_err_t lcd_touch_driver_init(void)
@@ -53,27 +82,32 @@ esp_err_t lcd_touch_driver_init(void)
 
     ESP_LOGI(TAG, "Init LCD touch");
 
-    ESP_ERROR_CHECK(lcd_touch_driver_init_rst_exio());
+    esp_err_t err = lcd_touch_driver_init_rst_exio();
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
     i2c_master_bus_handle_t i2c_master_bus_handle = NULL;
-    esp_err_t i2c_master_get_bus_handle_err = i2c_master_get_bus_handle(I2C_NUM_0, &i2c_master_bus_handle);
-    if (i2c_master_get_bus_handle_err != ESP_OK)
+    err = i2c_driver_get_bus_handle(&i2c_master_bus_handle);
+    if (err != ESP_OK)
     {
-        ESP_LOGE(TAG, "Get i2c bus handle failed: %s", esp_err_to_name(i2c_master_get_bus_handle_err));
-        return i2c_master_get_bus_handle_err;
-    }
-    if (i2c_master_bus_handle == NULL)
-    {
-        ESP_LOGE(TAG, "I2C bus not initialized. Please initialize I2C driver first.");
-        return ESP_ERR_INVALID_STATE;
+        ESP_LOGE(TAG, "Get I2C bus handle failed: %s", esp_err_to_name(err));
+        return err;
     }
 
     esp_lcd_panel_io_i2c_config_t touch_io_cfg = ESP_LCD_TOUCH_IO_I2C_SPD2010_CONFIG();
     touch_io_cfg.scl_speed_hz = LCD_TOUCH_I2C_CLK_HZ;
     touch_io_cfg.lcd_cmd_bits = 16;
     touch_io_cfg.lcd_param_bits = 8;
-    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &touch_io_cfg, &s_touch_io_handle));
-    // ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)I2C_NUM_0, &touch_io_cfg, &s_touch_io_handle));
+    esp_lcd_panel_io_handle_t touch_io_handle = NULL;
+    err = esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &touch_io_cfg, &touch_io_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create touch IO: %s", esp_err_to_name(err));
+        lcd_touch_driver_cleanup(NULL, touch_io_handle);
+        return err;
+    }
     ESP_LOGI(TAG, "I2C panel IO ready");
 
     esp_lcd_touch_config_t lcd_touch_config = {
@@ -92,8 +126,18 @@ esp_err_t lcd_touch_driver_init(void)
         },
         .interrupt_callback = NULL,
     };
-    ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_spd2010(s_touch_io_handle, &lcd_touch_config, &s_touch_handle));
+    esp_lcd_touch_handle_t touch_handle = NULL;
+    err = esp_lcd_touch_new_i2c_spd2010(touch_io_handle, &lcd_touch_config, &touch_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to create touch driver: %s", esp_err_to_name(err));
+        lcd_touch_driver_cleanup(NULL, touch_io_handle);
+        return err;
+    }
     ESP_LOGI(TAG, "LCD touch handle ready");
+
+    s_touch_io_handle = touch_io_handle;
+    s_touch_handle = touch_handle;
 
     return ESP_OK;
 }
