@@ -1,24 +1,20 @@
 #pragma once
 
+#include "esp_err.h"
+
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/spi_master.h"
-#include "esp_err.h"
-#include "esp_io_expander.h"
-#include "esp_lcd_panel_io.h"
-#include "esp_lcd_panel_ops.h"
-#include "esp_lcd_spd2010.h"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+#include "esp_lcd_types.h"
+
+#include "esp_io_expander.h"
 
 #define LCD_H_RES (412)
 #define LCD_V_RES (412)
 
 #define LCD_SPI_HOST (SPI2_HOST)
-#define LCD_SPI_CLK_HZ (80 * 1000 * 1000)
+#define LCD_SPI_CLK_HZ (80000000)
 #define LCD_SPI_TRANS_QUEUE_SIZE (10)
 #define LCD_SPI_CMD_BITS (32)
 #define LCD_SPI_PARAM_BITS (8)
@@ -46,13 +42,18 @@ extern "C"
 #define LCD_BL_PWM_FREQ_HZ (5000)
 #define LCD_BL_PWM_DUTY_RES (LEDC_TIMER_13_BIT)
 
-    esp_err_t lcd_service_init(void);
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
-    esp_err_t lcd_service_set_bl(uint8_t percent);
+    esp_err_t lcd_disp_driver_init(void);
 
-    esp_err_t lcd_service_get_panel(esp_lcd_panel_handle_t *lcd_panel);
+    esp_err_t lcd_disp_driver_get_panel_handle(esp_lcd_panel_handle_t *esp_lcd_panel_handle);
 
-    esp_err_t lcd_service_get_panel_io(esp_lcd_panel_io_handle_t *lcd_panel_io);
+    esp_err_t lcd_disp_driver_get_panel_io_handle(esp_lcd_panel_io_handle_t *panel_io_handle);
+
+    esp_err_t lcd_disp_driver_set_backlight(uint8_t percent);
 
 #ifdef __cplusplus
 }

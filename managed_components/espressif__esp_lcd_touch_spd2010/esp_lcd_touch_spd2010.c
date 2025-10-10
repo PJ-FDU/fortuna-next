@@ -135,7 +135,9 @@ esp_err_t esp_lcd_touch_new_i2c_spd2010(const esp_lcd_panel_io_handle_t io, cons
         ESP_GOTO_ON_ERROR(gpio_config(&rst_gpio_config), err, TAG, "GPIO reset config failed");
     }
     /* Reset controller */
+    ESP_LOGI(TAG, "Resetting touch controller");
     ESP_GOTO_ON_ERROR(reset(spd2010), err, TAG, "Reset failed");
+    ESP_LOGI(TAG, "Reset complete");
     ESP_GOTO_ON_ERROR(read_fw_version(spd2010), err, TAG, "Read version failed");
 
     ESP_LOGI(TAG, "Touch panel create success, version: %d.%d.%d", ESP_LCD_TOUCH_SPD2010_VER_MAJOR,
@@ -407,6 +409,7 @@ static esp_err_t Read_HDP_REMAIN_DATA(esp_lcd_touch_handle_t tp, tp_hdp_status_t
 
 static esp_err_t read_fw_version(esp_lcd_touch_handle_t tp)
 {
+    ESP_LOGI(TAG, "Read Touch IC Version");
     uint8_t sample_data[18];
     uint16_t DVer;
     uint32_t Dummy, PID, ICName_H, ICName_L;
@@ -419,13 +422,16 @@ static esp_err_t read_fw_version(esp_lcd_touch_handle_t tp)
     i2c_read(&sample_data[0], 18);
     esp_rom_delay_us(200);
 
+    ESP_LOGI(TAG, "Touch IC Version Read Done");
+
     Dummy = ((sample_data[0] << 24) | (sample_data[1] << 16) | (sample_data[3] << 8) | (sample_data[0]));
     DVer = ((sample_data[5] << 8) | (sample_data[4]));
     PID = ((sample_data[9] << 24) | (sample_data[8] << 16) | (sample_data[7] << 8) | (sample_data[6]));
     ICName_L = ((sample_data[13] << 24) | (sample_data[12] << 16) | (sample_data[11] << 8) | (sample_data[10]));    // "2010"
     ICName_H = ((sample_data[17] << 24) | (sample_data[16] << 16) | (sample_data[15] << 8) | (sample_data[14]));    // "SPD"
 
-    ESP_LOGD(TAG, "Dummy[%"PRIu32"], DVer[%"PRIu16"], PID[%"PRIu32"], Name[%"PRIu32"-%"PRIu32"]", Dummy, DVer, PID, ICName_H, ICName_L);
+    ESP_LOGI(TAG, "Touch IC Info:");
+    ESP_LOGI(TAG, "Dummy[%"PRIu32"], DVer[%"PRIu16"], PID[%"PRIu32"], Name[%"PRIu32"-%"PRIu32"]", Dummy, DVer, PID, ICName_H, ICName_L);
 
     return ESP_OK;
 }

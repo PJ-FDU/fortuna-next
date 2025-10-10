@@ -4,19 +4,6 @@
 #include "esp_log.h"
 #include "esp_check.h"
 
-// 硬件服务
-#include "i2c_service.h"
-#include "mic_service.h"
-#include "io_expander_service.h"
-#include "lcd_service.h"
-
-// 高级服务
-#include "wifi_service.h"
-#include "ui_system_service.h"
-// #include "audio_system_service.h"
-// #include "ui/voice_overlay.h"
-#include "lcd_touch_service.h"
-
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_partition.h" // 添加分区API
@@ -26,84 +13,66 @@
 #include "dirent.h"
 #include "driver/gpio.h"
 
+#include "i2c_driver.h"
+#include "io_exp_driver.h"
+#include "lcd_disp_driver.h"
+#include "lcd_touch_driver.h"
+#include "lvgl_driver.h"
+
 #include "lvgl.h" // LVGL主头文件
 
-#define TAG "fortuna"
+static const char *TAG = "main_fortuna";
 
-#define WIFI_SSID "ziroom_3501A" // Wi-Fi 名称
-#define WIFI_PASS "4001001111"   // Wi-Fi 密码
+static void screen_click_cb(lv_event_t *e)
+{
+    ESP_LOGI(TAG, "Screen clicked event");
+    if (!e) return;
+    /* Try to get current input device (first registered) */
+    lv_indev_t *indev = lv_indev_get_next(NULL);
+    if (!indev) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    ESP_LOGI(TAG, "Touch at: x=%d y=%d", p.x, p.y);
+}
 
-// on_audio_after_wakeup moved into mic_service implementation
 
-// VAD状态变化回调函数
-// static void on_vad_state_changed(bool vad_active)
-// {
-//     ESP_LOGI(TAG, "VAD state changed: %s", vad_active ? "ACTIVE" : "INACTIVE");
-
-//     if (vad_active)
-//     {
-//         voice_overlay_show();
-//     }
-//     else
-//     {
-//         voice_overlay_hide();
-//     }
-// }
-
-// WiFi连接状态回调函数
-// static void on_wifi_status_changed(bool connected)
-// {
-//     ESP_LOGI(TAG, "WiFi status changed: %s", connected ? "CONNECTED" : "DISCONNECTED");
-
-//     if (connected)
-//     {
-//         // 网络就绪，启动音频网络服务
-//         audio_system_start_network_services();
-//     }
-// }
-
-/*===========================*
- *           app_main
- *===========================*/
 void app_main(void)
 {
     ESP_LOGI(TAG, "=== Fortuna System Starting ===");
 
-    // 1. 初始化硬件服务
-    ESP_LOGI(TAG, "Initializing hardware services...");
-    ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
-    ESP_ERROR_CHECK(esp_i2c_service_init());
-    ESP_ERROR_CHECK(esp_io_expander_service_init());
-    ESP_ERROR_CHECK(lcd_service_init());
-    // ESP_ERROR_CHECK(lcd_touch_service_init());
+    ESP_ERROR_CHECK(i2c_driver_init());
+    ESP_ERROR_CHECK(io_exp_driver_init());
+    ESP_ERROR_CHECK(lcd_disp_driver_init());
+    ESP_ERROR_CHECK(lcd_touch_driver_init());
+    ESP_ERROR_CHECK(lvgl_driver_init());
 
-    // 2. 初始化UI系统
-    ESP_LOGI(TAG, "Initializing UI system...");
-    /* 获取面板句柄并传给 UI 系统；统一错误处理以便更明显地定位未初始化情况 */
-    esp_lcd_panel_handle_t panel = NULL;
-    esp_lcd_panel_io_handle_t panel_io = NULL;
-    // esp_lcd_touch_handle_t touch = NULL;
-    ESP_ERROR_CHECK(lcd_service_get_panel(&panel));
-    ESP_ERROR_CHECK(lcd_service_get_panel_io(&panel_io));
-    // ESP_ERROR_CHECK(lcd_touch_service_get_handle(&touch));
-    ESP_ERROR_CHECK(ui_system_init(panel, panel_io, NULL));
+    // 在这里进行i2c scan
+    i2c_master_bus_handle_t i2c_master_bus_handle = NULL;
+    esp_err_t i2c_master_get_bus_handle_err = i2c_master_get_bus_handle(I2C_NUM_0, &i2c_master_bus_handle);
+    if (i2c_master_get_bus_handle_err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Get I2C bus handle failed: %s", esp_err_to_name(i2c_master_get_bus_handle_err));
+        return;
+    }
+    if (i2c_master_bus_handle == NULL)
+    {
+        ESP_LOGE(TAG, "I2C bus not initialized. Please initialize I2C driver first.");
+        return;
+    }
+    for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+        if (i2c_master_probe(i2c_master_bus_handle, addr, 10) == ESP_OK) {
+            ESP_LOGI("I2C_DBG", "device at 0x%02X", addr);
+        }
+    }
 
-    // 启动触摸服务任务
+    // 写个最简单的示例
+    lv_obj_t *label = lv_label_create(lv_scr_act());
+    lv_label_set_text(label, "Hello, Fortuna!");
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
-    // 3. 初始化音频系统
-    // ESP_LOGI(TAG, "Initializing audio system...");
-    // ESP_ERROR_CHECK(audio_system_init(on_vad_state_changed, NULL));
+    lv_obj_add_event_cb(lv_scr_act(), screen_click_cb, LV_EVENT_CLICKED, NULL);
 
-    // 4. 初始化WiFi服务
-    // ESP_LOGI(TAG, "Initializing WiFi service...");
-    // ESP_ERROR_CHECK(wifi_service_init(WIFI_SSID, WIFI_PASS, on_wifi_status_changed));
-
-    // ESP_LOGI(TAG, "=== System initialization completed ===");
-    // ESP_LOGI(TAG, "System is running, waiting for events...");
-    ESP_ERROR_CHECK(wifi_service_init(WIFI_SSID, WIFI_PASS, NULL));
-    ESP_ERROR_CHECK(mic_service_init());
-
-    // 主循环 - 系统空闲
+    
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(10000));

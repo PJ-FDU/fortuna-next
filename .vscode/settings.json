@@ -1,21 +1,18 @@
 {
+  "cmake.cmakePath": "/opt/homebrew/bin/cmake",
   "C_Cpp.intelliSenseEngine": "default",
-  "idf.espIdfPathWin": "C:\\Users\\PanJian\\esp\\v5.5\\esp-idf",
-  "idf.pythonInstallPath": "C:\\Users\\PanJian\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.espIdfPathWin": "/Users/panjian/esp/v5.5/esp-idf",
+  "idf.pythonInstallPath": "/opt/anaconda3/bin/python",
   "idf.openOcdConfigs": ["board/esp32s3-builtin.cfg"],
+  "idf.toolsPath": "/Users/panjian/.espressif",
   "idf.toolsPathWin": "C:\\Users\\PanJian\\.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32s3"
   },
-  "clangd.path": "C:\\Users\\PanJian\\.espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
-  "clangd.arguments": [
-    "--background-index",
-    "--query-driver=C:\\Users\\PanJian\\.espressif\\tools\\xtensa-esp-elf\\esp-14.2.0_20241119\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
-    "--compile-commands-dir=c:\\Users\\PanJian\\Documents\\Code\\fortuna-next\\build"
-  ],
   "idf.flashType": "UART",
   "idf.portWin": "COM5",
   "files.associations": {
+    "*.ttml": "ttml",
     "*.cjson": "jsonc",
     "*.wxss": "css",
     "*.wxs": "javascript",
@@ -46,6 +43,43 @@
     "esp_io_expander.h": "c",
     "spi_master.h": "c",
     "esp_lcd_spd2010.h": "c",
-    "audio_input_mask.h": "c"
-  }
+    "audio_input_mask.h": "c",
+    "esp_err.h": "c",
+    "esp_log.h": "c",
+    "format": "c",
+    "i2c_driver.h": "c",
+    "esp_lcd_panel_io.h": "c",
+    "esp_lcd_io_i80.h": "c",
+    "lcd_disp_driver.h": "c",
+    "gpio.h": "c",
+    "io_expander_service.h": "c",
+    "esp_lcd_panel_vendor.h": "c",
+    "esp_lcd_panel_dev.h": "c",
+    "esp_lcd_touch_spd2010.h": "c",
+    "esp_lvgl_port_touch.h": "c",
+    "wifi_service.h": "c",
+    "mic_service.h": "c",
+    "lv_examples.h": "c",
+    "lv_example_get_started.h": "c"
+  },
+  "cSpell.words": [
+    "disp",
+    "espressif",
+    "EXIO",
+    "hpoint",
+    "hres",
+    "inited",
+    "LEDC",
+    "LOGI",
+    "LOGW",
+    "lvgl",
+    "pclk",
+    "qspi",
+    "sclk",
+    "SPICOMMON",
+    "spiram",
+    "waveshare"
+  ],
+  "idf.espIdfPath": "/Users/panjian/esp/v5.5.1/esp-idf",
+  "idf.port": "/dev/tty.usbmodem11101"
 }
