@@ -92,27 +92,9 @@ dependencies:
       require: private
       version: '>=4.4.2'
     source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.1.2
-  espressif/esp_lcd_touch_spd2010:
-    component_hash: 2079644d54c9cae5d478b8923fb4d93721cea09814a4206dc43805cbd6b22443
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.4.2'
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com
-      require: private
-      version: 0.*
-    - name: espressif/esp_lcd_touch
-      registry_url: https://components.espressif.com
-      require: public
-      version: ^1
-    source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.0.0
+    version: 1.1.2
   espressif/esp_lvgl_port:
     component_hash: bfb2778c063b05a6c47c1a8de6d166ee4d911bc86fe0b3ff9e6bab06d2812033
     dependencies:
@@ -151,17 +133,28 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.2
+  fortuna/esp_lcd_touch_spd2010:
+    dependencies:
+    - name: idf
+      version: '>=5.5.1'
+    - name: espressif/esp_lcd_touch
+      public: true
+      version: ^1.1.2
+    source:
+      path: /Users/panjian/Code/fortuna-next/components/fortuna__esp_lcd_touch_spd2010
+      type: local
+    version: 0.1.0
   idf:
     source:
       type: idf
     version: 5.5.1
   lvgl/lvgl:
-    component_hash: b702d642e03e95928046d5c6726558e6444e112420c77efa5fdb6650b0a13c5d
+    component_hash: 17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
     dependencies: []
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 9.3.0
+    version: 9.4.0
   waveshare/pcf85063a:
     component_hash: 7e1a2a705bc8c9e9104d8835903f24b11ef52f351f0634afc7bb78783234f339
     dependencies:
@@ -186,13 +179,14 @@ direct_dependencies:
 - espressif/esp-sr
 - espressif/esp_io_expander_tca9554
 - espressif/esp_lcd_spd2010
-- espressif/esp_lcd_touch_spd2010
+- espressif/esp_lcd_touch
 - espressif/esp_lvgl_port
 - espressif/esp_websocket_client
 - espressif/i2c_bus
+- fortuna/esp_lcd_touch_spd2010
 - idf
 - waveshare/pcf85063a
 - waveshare/qmi8658
-manifest_hash: 5db0eaef4fe4915a7f05bb1ec62b556123a45e359a670201c73f25aa2d4d8b9e
+manifest_hash: 01609280dfb154400d79c77c441840a5688ba60defb40dc1d66d028cd4b90b8c
 target: esp32s3
 version: 2.0.0

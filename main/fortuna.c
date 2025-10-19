@@ -24,8 +24,10 @@
 #include "lvgl_driver.h"
 #include "sd_card_driver.h"
 
-#include "lvgl.h" // LVGL主头文件
+#include "lvgl.h"
+#include "src/misc/cache/instance/lv_image_cache.h"
 #include "esp_lvgl_port.h"
+
 
 static const char *TAG = "main_fortuna";
 static lv_obj_t *s_status_label = NULL;
@@ -1172,30 +1174,30 @@ void app_main(void)
     // 写个最简单的示例
     if (lvgl_port_lock(0))
     {
-        // create_img_bg();
+        create_img_bg();
 
-        // s_status_label = lv_label_create(lv_scr_act());
-        // lv_label_set_text(s_status_label, "Hello, Fortuna!");
-        // lv_obj_align(s_status_label, LV_ALIGN_CENTER, 0, 12);
-        // lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xffffff), LV_PART_MAIN);
-        // lv_obj_set_style_text_font(s_status_label, lv_theme_get_font_large(lv_scr_act()), LV_PART_MAIN);
-        // lv_obj_set_style_text_align(s_status_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        s_status_label = lv_label_create(lv_scr_act());
+        lv_label_set_text(s_status_label, "Hello, Fortuna!");
+        lv_obj_align(s_status_label, LV_ALIGN_CENTER, 0, 12);
+        lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xffffff), LV_PART_MAIN);
+        lv_obj_set_style_text_font(s_status_label, lv_theme_get_font_large(lv_scr_act()), LV_PART_MAIN);
+        lv_obj_set_style_text_align(s_status_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
-        // lv_obj_add_flag(lv_scr_act(), LV_OBJ_FLAG_CLICKABLE);
-        // lv_obj_add_event_cb(lv_scr_act(), screen_event_cb, LV_EVENT_ALL, NULL);
+        lv_obj_add_flag(lv_scr_act(), LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(lv_scr_act(), screen_event_cb, LV_EVENT_ALL, NULL);
 
-        esp_err_t err = ensure_spiffs_mounted();
-        if (err != ESP_OK)
-        {
-            ESP_LOGE(TAG, "SPIFFS mount failed: %s", esp_err_to_name(err));
-            return;
-        }
+        // esp_err_t err = ensure_spiffs_mounted();
+        // if (err != ESP_OK)
+        // {
+        //     ESP_LOGE(TAG, "SPIFFS mount failed: %s", esp_err_to_name(err));
+        //     return;
+        // }
         // 在屏幕上绘制home_create
         // lv_obj_t *home = home_create();
         // lv_scr_load(home);
 
-        lv_obj_t *watchface = watchface_create();
-        lv_scr_load(watchface);
+        // lv_obj_t *watchface = watchface_create();
+        // lv_scr_load(watchface);
 
         lvgl_port_unlock();
     }

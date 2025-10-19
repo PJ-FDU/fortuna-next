@@ -98,8 +98,6 @@ esp_err_t lcd_touch_driver_init(void)
 
     esp_lcd_panel_io_i2c_config_t touch_io_cfg = ESP_LCD_TOUCH_IO_I2C_SPD2010_CONFIG();
     touch_io_cfg.scl_speed_hz = LCD_TOUCH_I2C_CLK_HZ;
-    touch_io_cfg.lcd_cmd_bits = 16;
-    touch_io_cfg.lcd_param_bits = 8;
     esp_lcd_panel_io_handle_t touch_io_handle = NULL;
     err = esp_lcd_new_panel_io_i2c_v2(i2c_master_bus_handle, &touch_io_cfg, &touch_io_handle);
     if (err != ESP_OK)

@@ -61,7 +61,9 @@
     "mic_service.h": "c",
     "lv_examples.h": "c",
     "lv_example_get_started.h": "c",
-    "lvgl_driver.h": "c"
+    "lvgl_driver.h": "c",
+    "esp_lvgl_port.h": "c",
+    "lv_image_cache.h": "c"
   },
   "cSpell.words": [
     "disp",

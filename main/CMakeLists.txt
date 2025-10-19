@@ -36,6 +36,7 @@ set(REQUIRES
     wear_levelling
     esp_http_client
     sdmmc
+    fortuna__esp_lcd_touch_spd2010
 )
 
 # 注册组件

@@ -14,7 +14,7 @@
 - `main/fortuna.c` - 程序入口与主逻辑
 - `main/lv_conf.h` - LVGL 配置（内存后端、大小等）
 - `managed_components/lvgl__lvgl/` - LVGL 源码与内存后端实现
-- `managed_components/espressif__esp_lcd_touch_spd2010/esp_lcd_touch_spd2010.c` - SPD2010 触摸驱动（含读数据与清中断实现）
+- `components/fortuna__esp_lcd_touch_spd2010/esp_lcd_touch_spd2010.c` - SPD2010 触摸驱动（含读数据与清中断实现）
 
 ## 开发环境要求
 - ESP-IDF（与项目兼容的版本，请参照本仓库或你的本地 IDF 配置）
@@ -66,7 +66,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ## 触摸（SPD2010）中断与清中断行为说明
 
-- 本仓库中 `managed_components/espressif__esp_lcd_touch_spd2010/esp_lcd_touch_spd2010.c` 的实现会在读取流程里通过 I2C 下发 Clear INT 命令（函数 `write_tp_clear_int_cmd`），触摸芯片收到命令后会释放其 INT 输出线，从而结束该次中断。
+- 本仓库中 `components/fortuna__esp_lcd_touch_spd2010/esp_lcd_touch_spd2010.c` 的实现会在读取流程里通过 I2C 下发 Clear INT 命令（函数 `write_tp_clear_int_cmd`），触摸芯片收到命令后会释放其 INT 输出线，从而结束该次中断。
 - 中断处理机制为：GPIO ISR 仅唤醒任务（或 LVGL 线程）；真正的 I2C 读/写与清中断操作在任务上下文中完成（这是合理且安全的做法，因为 I2C 不应在 ISR 中执行）。
 - 如果需要避免重复触发，可以在任务里在读/清之前调用 `gpio_intr_disable()`，读/清完成后再 `gpio_intr_enable()`；请注意不同 IDF 版本对这些 API 在 ISR/任务中的可用性有差异，推荐把禁用/启用放在任务上下文以保证安全性。
 

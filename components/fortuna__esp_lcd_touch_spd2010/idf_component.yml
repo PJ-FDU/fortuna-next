@@ -1,0 +1,8 @@
+name: fortuna/esp_lcd_touch_spd2010
+version: 0.1.0
+description: Fortuna Next 定制的 SPD2010 触摸控制器驱动
+dependencies:
+  idf: '>=5.5.1'
+  espressif/esp_lcd_touch:
+    version: ^1.1.2
+    public: true
