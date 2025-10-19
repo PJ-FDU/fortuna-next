@@ -9,6 +9,7 @@ set(SRCS
     "drivers/lcd_disp_driver/lcd_disp_driver.c"
     "drivers/lcd_touch_driver/lcd_touch_driver.c"
     "drivers/lvgl_driver/lvgl_driver.c"
+    "drivers/sd_card_driver/sd_card_driver.c"
 )
 
 # 设置头文件包含目录
@@ -20,6 +21,7 @@ set(INCLUDE_DIRS
     "drivers/lcd_disp_driver"
     "drivers/lcd_touch_driver"
     "drivers/lvgl_driver"
+    "drivers/sd_card_driver"
 )
 
 set(REQUIRES
@@ -33,6 +35,7 @@ set(REQUIRES
     fatfs
     wear_levelling
     esp_http_client
+    sdmmc
 )
 
 # 注册组件
