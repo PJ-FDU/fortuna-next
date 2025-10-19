@@ -58,7 +58,7 @@ dependencies:
       type: service
     version: 1.0.1
   espressif/esp_io_expander_tca9554:
-    component_hash: e725a7d5f17e4165e7fa3db0da0c29cc7a84e04fd33e1c786105076239828ea5
+    component_hash: b8d7ff823eed8a8c05c49f01d554d08f75146a17a1c50bfb354b6c4c8819fc05
     dependencies:
     - name: espressif/esp_io_expander
       registry_url: https://components.espressif.com
@@ -70,7 +70,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 2.0.1
+    version: 2.0.2
   espressif/esp_lcd_spd2010:
     component_hash: 8637c97feeb8d83ba637599f6bf4ef30e83595486930e7df17ffa24f3fef1242
     dependencies:
@@ -120,19 +120,19 @@ dependencies:
       type: service
     version: 1.5.0
   espressif/i2c_bus:
-    component_hash: fe8f85b3859544fabb960d7bcec24278cd3c88e3f1777e8a2075b0aca202fd9f
+    component_hash: 4e990dc11734316186b489b362c61d41f23f79d58bc169795cec215e528cba14
     dependencies:
     - name: espressif/cmake_utilities
       registry_url: https://components.espressif.com
       require: private
-      version: 0.*
+      version: '*'
     - name: idf
       require: private
       version: '>=4.0'
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.4.2
+    version: 1.5.0
   fortuna/esp_lcd_touch_spd2010:
     dependencies:
     - name: idf
@@ -152,7 +152,7 @@ dependencies:
     component_hash: 17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
     dependencies: []
     source:
-      registry_url: https://components.espressif.com
+      registry_url: https://components.espressif.com/
       type: service
     version: 9.4.0
   waveshare/pcf85063a:
@@ -185,8 +185,9 @@ direct_dependencies:
 - espressif/i2c_bus
 - fortuna/esp_lcd_touch_spd2010
 - idf
+- lvgl/lvgl
 - waveshare/pcf85063a
 - waveshare/qmi8658
-manifest_hash: 01609280dfb154400d79c77c441840a5688ba60defb40dc1d66d028cd4b90b8c
+manifest_hash: 46a1c998e7d9296f9b4ef72ae61a21555c201fab88ee5a84cd81db53f445244f
 target: esp32s3
 version: 2.0.0
