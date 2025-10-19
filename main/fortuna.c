@@ -1178,7 +1178,7 @@ void app_main(void)
 
         s_status_label = lv_label_create(lv_scr_act());
         lv_label_set_text(s_status_label, "Hello, Fortuna!");
-        lv_obj_align(s_status_label, LV_ALIGN_CENTER, 0, 12);
+        lv_obj_align(s_status_label, LV_ALIGN_CENTER, 0, 0);
         lv_obj_set_style_text_color(s_status_label, lv_color_hex(0xffffff), LV_PART_MAIN);
         lv_obj_set_style_text_font(s_status_label, lv_theme_get_font_large(lv_scr_act()), LV_PART_MAIN);
         lv_obj_set_style_text_align(s_status_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);

@@ -188,6 +188,6 @@ direct_dependencies:
 - lvgl/lvgl
 - waveshare/pcf85063a
 - waveshare/qmi8658
-manifest_hash: 46a1c998e7d9296f9b4ef72ae61a21555c201fab88ee5a84cd81db53f445244f
+manifest_hash: b1c5130988b4001fe383ba10bbbc0de13f6eb401cc2d54c36fe3a4e67b97cbe2
 target: esp32s3
 version: 2.0.0

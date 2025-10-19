@@ -89,7 +89,7 @@ esp_err_t lcd_touch_driver_init(void)
     }
 
     i2c_master_bus_handle_t i2c_master_bus_handle = NULL;
-    err = i2c_driver_get_bus_handle(&i2c_master_bus_handle);
+    err = i2c_driver_get_bus_handle(I2C_DRIVER_BUS_MAIN, &i2c_master_bus_handle);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Get I2C bus handle failed: %s", esp_err_to_name(err));
